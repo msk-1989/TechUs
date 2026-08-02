@@ -162,3 +162,76 @@ Stage Summary:
   - /home/z/my-project/download/qa-updated-dashboard.png (dashboard with Decisions banner + 12 modules)
   - /home/z/my-project/download/qa-decision-needed-dialog.png (decision-needed test case detail)
   - /home/z/my-project/download/qa-module-reports-12.png (12-module reports view)
+
+---
+Task ID: 4
+Agent: Main agent (Super Z)
+Task: Transform testing reporting system into production-grade QA platform with auth, audit log, notifications, and deploy to Vercel
+
+Work Log:
+- Switched database from SQLite to Neon PostgreSQL (production-grade Postgres)
+- Added NextAuth.js authentication (Credentials provider, JWT sessions, bcrypt password hashing)
+- Added 7 new Prisma models:
+  • User, Account, Session, VerificationToken (NextAuth)
+  • AuditLog (every action logged with user + timestamp)
+  • Notification (in-app notifications with read/unread state)
+  • TestRun (named test execution sessions)
+  • Milestone (project milestones with target dates)
+- Added `assignedTesterId` and `milestoneId` to TestCase for assignment + milestone tracking
+- Created `/api/auth/[...nextauth]` route (NextAuth handler)
+- Created `/api/auth/register` endpoint (creates User + Tester in one transaction)
+- Created `/api/audit` endpoint (GET audit logs)
+- Created `/api/notifications` endpoint (GET + PATCH with markAllRead)
+- Created `/api/test-runs` endpoint (GET/POST/PATCH for test run sessions)
+- Created `/api/milestones` endpoint (GET milestones with stats)
+- Updated `/api/test-cases` PATCH to require auth + create audit log on every execution
+- Updated `/api/bugs` POST/PATCH to require auth + create audit log + notify assignee
+- Updated `/api/testers` POST to require auth + create linked User account + audit log
+- Created `src/lib/auth.ts` — NextAuth config with Credentials provider
+- Created `src/lib/audit.ts` — Helper functions for audit log + notifications
+- Created `src/components/providers.tsx` — NextAuth SessionProvider wrapper
+- Created `src/components/auth-gate.tsx` — Auth wrapper showing login screen if unauthenticated
+- Created `src/components/auth-modal.tsx` — Beautiful login/signup modal with demo account quick-fill
+- Updated `src/app/layout.tsx` to wrap children in Providers (SessionProvider)
+- Rebranded app from "Hidayah Connect × TeachUs" to "TechUs QA"
+- Added NotificationBell component (polls every 30s, shows unread badge, mark-all-read)
+- Added UserMenu component (shows user avatar, role, sign-out option)
+- Auto-sets current tester from session user on login
+- Seeded Neon PostgreSQL with:
+  • 1 admin user (admin@techus.app / admin123)
+  • 5 demo tester users (password: tester123 each)
+  • 1 milestone (MVP Launch Readiness, 30 days out)
+  • 506 test cases across 12 modules (all linked to milestone)
+  • 1 audit log entry (system.seed)
+- Updated package.json:
+  • Renamed to "techus-qa"
+  • Removed `tee dev.log` from dev script (cleaner output)
+  • Simplified build script (no standalone copy in dev)
+  • Added `postinstall: prisma generate` (auto-generate on Vercel)
+- Updated next.config.ts with allowedDevOrigins for preview domain
+- Updated tsconfig.json to exclude skills, scripts, mini-services, tests folders from build
+- Created README.md with full documentation
+- Created .env.example for new developers
+- Updated .gitignore to exclude .env, db/, logs, uploads
+- Initialized git repo, created GitHub repo at github.com/msk-1989/TechUs
+- Pushed all code to GitHub (32 files in initial commit)
+- Verified production build succeeds (14 routes, all compile cleanly)
+- Verified lint passes with zero issues
+- Created deploy.sh script for one-command Vercel deployment
+
+Stage Summary:
+- **GitHub repo**: https://github.com/msk-1989/TechUs (public)
+- **Database**: Neon PostgreSQL (production-grade, connection pooled)
+- **Build status**: ✓ Compiles cleanly (14 routes)
+- **Lint status**: ✓ Zero issues
+- **Test cases seeded**: 506 across 12 modules
+- **Users seeded**: 6 (1 admin + 5 testers, all with login credentials)
+- **Demo accounts**:
+  • admin@techus.app / admin123 (full admin access)
+  • priya.n@hidayah.test / tester123 (demo tester)
+  • aarav.s@hidayah.test / tester123 (QA Lead)
+  • imran.k@hidayah.test / tester123
+  • sarah.j@teachus.test / tester123
+  • bilal.a@teachus.test / tester123
+- **Pending**: Vercel deployment (user needs to import repo on Vercel dashboard)
+- **Security**: .env NOT committed to git; user should rotate GitHub PAT (shared in chat)
