@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.85"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded background with emerald-to-teal gradient -->
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- White shield (matches lucide-react Shield icon used in app header) -->
+  <path
+    d="M32 12 L48 18 L48 32 C48 42 41 49 32 52 C23 49 16 42 16 32 L16 18 Z"
+    fill="url(#shield)"
+    stroke="#ffffff"
+    stroke-width="1.5"
+    stroke-linejoin="round"
+  />
+  <!-- Emerald checkmark inside shield (representing QA "pass" / verification) -->
+  <path
+    d="M24 32 L30 38 L42 24"
+    fill="none"
+    stroke="#059669"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
