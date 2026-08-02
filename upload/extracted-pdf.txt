@@ -1,0 +1,1597 @@
+=== PAGE 1 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+HIDAYAH CONNECT & TEACHUS
+Complete Product Journey & Field SpecificaAon
+Teacher Journey · Student Journey · Administrator Journey · Course Crea>on Field Reference
+Prepared for the Development Team
+Version 1.0 — August 2026
+CONFIDENTIAL — Internal product/engineering specification
+CONFIDENTIAL — Internal product/engineering specification | Page 1 of 49
+=== PAGE 2 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Table of Contents
+1. PlaGorm Overview 3
+2. Complete Teacher Journey 5
+3. Course CreaAon — Field SpecificaAon (12 Steps) 9
+4. Demo Class System 13
+5. Class Delivery, Escrow & Payout 15
+6. Complete Student Journey 18
+7. Teacher Journey — AWer a Student Enrolls 22
+8. Parent / Guardian Journey & Approval Flow 24
+9. Administrator Journey 26
+10. CondiAonal / IF-ELSE Flows 28
+11. Refund Policy 28
+12. NoAficaAons Matrix 32
+13. Support & TickeAng System 33
+14. Edge Cases 35
+15. Database Field Reference 36
+16. Worked Scenarios — End-to-End Examples 40
+CONFIDENTIAL — Internal product/engineering specification | Page 2 of 49
+=== PAGE 3 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+1. PlaGorm Overview
+1.1 Vision
+Hidayah Connect and TeachUs are twin global teacher-marketplace plaLorms — Hidayah Connect for Islamic
+educa>on (Quran, Tajweed, Hifz, Arabic, Islamic Studies), and TeachUs for mainstream academic educa>on (CBSE/
+ICSE/State Board/GCSE/IB and core subjects). Both run on the same underlying architecture: teacher onboarding,
+course crea>on, scheduling, escrow-based payments, and payouts, so this specifica>on applies to both unless a
+sec>on says otherwise.
+1.2 User Types
+● Teacher — creates a profile, lists courses, teaches classes, receives payouts.
+● Student — discovers teachers/courses, books trials or full courses, aZends classes, tracks progress.
+● Administrator — approves teachers and courses, manages disputes/refunds/escrow, monitors revenue
+and payouts.
+1.3 Core Modules
+● Teacher Marketplace — discovery, profiles, filtering, ra>ngs.
+● Student Marketplace — search, booking, purchase, progress tracking.
+● Admin Portal — approvals, disputes, financial oversight, CMS.
+● Payment System — Razorpay (India) / Stripe (interna>onal).
+● Wallet & Escrow System — holds student payments un>l milestones release them to teachers.
+● Recording System — op>onal premium add-on with a fixed storage lifecycle.
+1.4 Teacher Status & Badge System
+Every teacher account carries one status and one badge level at all >mes:
+Status Meaning
+Pending Verifica>on Registered, awai>ng admin review
+Verified Admin-approved, basic checks passed
+Ac>ve Live on the marketplace, can teach and earn
+Suspended Temporarily blocked (e.g. ac>ve dispute or policy issue)
+Blocked Permanently removed from the plaLorm
+Badge Level Requirements
+Level 1 — Verified Teacher Email verified + Mobile verified + Iden>ty verified
+Level 2 — Cer>fied Teacher Verified Teacher + Qualifica>on documents approved
+Level 3 — Top Educator 25+ classes completed + ra>ng above 4.5
+Level 4 — Featured Educator Admin selec>on + consistent performance
+1.5 Global Payment Architecture
+CONFIDENTIAL — Internal product/engineering specification | Page 3 of 49
+=== PAGE 4 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+India InternaAonal
+Student payments Razorpay Stripe
+Teacher payouts Razorpay Payouts (Bank Transfer / UPI) Stripe Connect (Bank Transfer)
+PlaGorm-Specific Pricing (confirmed final)
+HidayahConnect TeachUsConnect
+Teacher registra>on fee (India) ₹399, one->me, life>me access ₹499, one->me, life>me access
+$9.99, one->me, life>me access
+Teacher registra>on fee
+$9.99, one->me, life>me access (assumed same as HidayahConnect —
+(Interna>onal)
+not independently confirmed)
+PlaLorm commission 30% (teacher retains 70%) 28% (teacher retains 72%)
+These are two genuinely different pricing structures, confirmed final by the founder — not a shared rate. Every registra>on-fee
+and commission figure elsewhere in this document should be read as pla@orm-specific: use the HidayahConnect column when
+the teacher/course is on HidayahConnect, and the TeachUsConnect column when it's on TeachUsConnect.
+CONFIDENTIAL — Internal product/engineering specification | Page 4 of 49
+=== PAGE 5 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+2. Complete Teacher Journey
+This sec>on covers everything from a teacher's first Google search through admin approval and dashboard access.
+Course crea>on itself is detailed separately in Sec>on 3.
+2.1 Discovery & Landing Page
+Teacher opens Google
+↓ Searches “Online Quran Teaching Jobs” (or equivalent for TeachUs)
+↓ Google search result
+↓ Clicks Hidayah Connect
+↓ Website opens — Landing Page
+↓ Reads Hero Banner
+↓ Reads Features
+↓ Reads Earnings poten>al
+↓ Reads How It Works
+↓ Reads Tes>monials
+↓ Reads FAQ
+↓ Clicks “Become a Teacher”
+IF the teacher already has an account (previously registered, then logged out or reinstalled the app): they do NOT click
+“Become a Teacher.” The landing page always shows a separate, equally visible “Login” op>on, which takes a returning teacher
+straight to the login screen instead of registra>on.
+2.2 RegistraAon
+Registra>on is a 7-step wizard. Each step ends with Next / Previous (Previous is disabled only on step A). Progress
+is auto-saved aper every step, so a teacher who leaves mid-registra>on resumes exactly where they stopped the
+next >me they log in.
+Step A — Account CreaAon
+CONFIDENTIAL — Internal product/engineering specification | Page 5 of 49
+=== PAGE 6 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Required — which teacher does this
+become? Determines the registra>on fee
+PlaLorm HidayahConnect / TeachUsConnect
+and commission rate applied from this
+point on (Sec>on 1.5)
+Full Name Text Required
+Email Address Email, verified via OTP Required, unique
+Mobile Number Phone, verified via OTP Required, unique
+Required — determines fee currency &
+Country Dropdown
+payout rail
+Gender Male / Female / Other Required
+On submit: Email OTP sent → verified. Mobile OTP sent → verified. Status becomes Account Created. Next.
+Step B — RegistraAon Fee
+Field Type / OpAons Notes
+HidayahConnect: ₹399 (India) / $9.99 One->me, life>me access — no recurring
+Registra>on fee (Interna>onal). TeachUsConnect: ₹499 subscrip>on. Amount shown depends on
+(India) / $9.99 (Interna>onal) the PlaLorm selected in Step A
+Coupon code Op>onal text field Applies discount if valid
+GST Auto-calculated for India Shown before payment
+Razorpay (India) / Stripe Card, UPI, netbanking, wallet depending
+Payment method
+(interna>onal) on gateway
+On successful payment: invoice generated and emailed. Status becomes Registra>on Completed. Next.
+IF payment fails: show Retry, Try a Different Payment Method, or Cancel. No account progress is lost — the teacher returns to
+this same step.
+Step C — Profile Setup (Personal & Professional)
+Field Type / OpAons Notes
+Profile photo Image upload Required
+About me Long text Required
+Date of birth Date Required
+Na>onality Dropdown Required
+State / City Dropdown / text Required
+WhatsApp number Phone Op>onal
+Languages known Mul>-select Required
+Preferred teaching language Dropdown Required
+Time zone Auto-detected, editable Required
+CONFIDENTIAL — Internal product/engineering specification | Page 6 of 49
+=== PAGE 7 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Highest qualifica>on Dropdown Required
+Islamic qualifica>on (Hidayah
+Dropdown Condi>onal on plaLorm
+Connect only)
+University / Ins>tute Text Op>onal
+Years of experience Number Required
+Mul>-select from plaLorm-specific
+Teaching categories & subjects Required
+category list (Sec. 1.5 / 3.1)
+TeachUs: CBSE/ICSE/State Board/GCSE/
+Curriculum(s) taught Mul>-select
+IB
+Preferred age group Mul>-select Required
+Required — mirrors the mandatory
+Preferred student gender Male / Female / Both
+gender filter students use
+Teaching mode One-to-One / Group / Both Required
+Dropdown: Hourly / Monthly / Per
+Profile fee type Required
+Course
+Required — paired with the fee type
+Profile fee amount Number
+above
+Current occupa>on and a standalone Availability calendar have been removed from this step — occupa>on isn't needed, and
+availability is set once, per course, in Course Crea>on Step 5 (Sec>on 3), so asking for it again here was redundant. The profile
+fee type/amount above is a general “star>ng from” indicator shown on the teacher's public profile (e.g. “From ₹800/hr”) — it
+does not set actual pricing. Each course's real price is configured independently in Course Crea>on, Step 7a. This two->er
+structure is confirmed: it lets students browsing the marketplace get a rough sense of a teacher's rates before opening their
+profile, the same way marketplaces like Udemy or Upwork show a “star>ng at” price, while the actual price students pay is
+always the one set on the specific course.
+Next. Status becomes Profile Completed.
+Step D — IdenAty VerificaAon (KYC)
+Field Type / OpAons Notes
+Aadhaar / Passport / Na>onal ID /
+ID type Required
+Driving License (any one)
+Upload — front Image/PDF upload Required
+Upload — back Image/PDF upload If applicable to ID type
+Live selfie In-app camera capture Required
+Face verifica>on Automated match against ID photo Automated
+OTP Sent to registered mobile/email Final confirma>on step
+Status becomes Iden>ty Verified. Next.
+Step E — QualificaAon Documents (OpAonal)
+CONFIDENTIAL — Internal product/engineering specification | Page 7 of 49
+=== PAGE 8 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Degree cer>ficate Upload Op>onal
+Ijazah cer>ficate (Hidayah
+Upload Op>onal
+Connect)
+Hafiz cer>ficate (Hidayah
+Upload Op>onal
+Connect)
+Teaching license / cer>ficate Upload Op>onal
+Professional cer>fica>ons Upload (mul>ple) Op>onal
+Resume Upload Op>onal
+Experience leZer Upload Op>onal
+Police verifica>on Upload Op>onal
+Video introduc>on Video upload, 60-120 sec suggested Op>onal but strongly encouraged
+Teachers who skip this step can s>ll teach — they simply carry the Level 1 (Verified Teacher) badge instead of Level 2 (Cer>fied
+Teacher) un>l they submit and get these approved.
+Next.
+Step F — Payout Setup
+Field Type / OpAons Notes
+Legal Name, Date of Birth, Address, Stripe verifies iden>ty, banking details,
+Interna>onal — Stripe Connect
+Country, Bank Account payout eligibility → Payout Ready
+Account Holder Name, Bank Account
+India — Razorpay → Bank Verified
+Number, IFSC Code, PAN Number
+Next.
+Step G — Review & Submit
+Shows every field entered across Steps A–F for final review, with an Edit link back to each step. On Submit: status
+becomes Pending Verifica>on and the admin team is no>fied.
+2.3 Admin Review
+Admin receives noAficaAon
+↓ Opens Admin Dashboard → Verifica>on Queue
+↓ Reviews profile, iden>ty documents, qualifica>on documents (if submiZed), payout setup
+↓ Checklist: Email Verified ✓ · Mobile Verified ✓ · Profile Complete ✓ · Iden>ty Verified ✓ · Payout Setup Complete ✓ ·
+Qualifica>on Verified (op>onal) ✓
+CONFIDENTIAL — Internal product/engineering specification | Page 8 of 49
+=== PAGE 9 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+↓ Decision: Approve / Reject / Request Addi>onal Informa>on
+IF Rejected: reason is shown to the teacher → teacher uploads new/corrected documents → resubmits → back into the
+Verifica>on Queue.
+IF Request Addi>onal Informa>on: teacher is no>fied of exactly what's missing and can add it without re-submifng the whole
+applica>on.
+On Approve: teacher receives a “Congratula>ons — your account is approved” no>fica>on. Status becomes Ac>ve
+Teacher. Teacher logs in and the Dashboard opens.
+2.4 Teacher Dashboard
+The dashboard is the teacher's home screen aper login and contains:
+Module Module Module
+Profile Comple>on % Wallet Upcoming Classes
+Students Courses Messages
+Announcements Performance Analy>cs Ra>ngs
+Calendar No>fica>ons Support
+Sevngs Create Course Payout
+Subscrip>on (Recording Pass) Cer>ficates Community
+Referral Help Center
+The Subscrip>on (Recording Pass) module is where a teacher sees, at a glance, whether recording is ac>ve on their account
+and how many of their 3 course slots are in use (e.g. “Ac>ve — 2 of 3 courses”) — the same status shown inline during Course
+Crea>on Step 7c (Sec>on 3). The Support module is where a teacher raises a help >cket for any issue — see Sec>on 13 for the
+full >cke>ng system.
+CONFIDENTIAL — Internal product/engineering specification | Page 9 of 49
+=== PAGE 10 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+3. Course CreaAon — Field SpecificaAon (12 Steps)
+This supersedes the earlier 7–8 phase outline with the finalized, more precise workflow. Objec>ve: let teachers
+build professional, marketplace-ready courses with no schedule conflicts, proper pricing, and complete lesson
+planning.
+Step 1 — Start New Course
+Teacher clicks Create New Course, then:
+Field Type / OpAons Notes
+Hidayah Connect: Quran Reading,
+Tajweed, Hifz, Arabic, Islamic Studies,
+Kids Islamic Learning, etc.
+Required — determines which sub-
+PlaLorm category
+category list appears next
+TeachUs: Mathema>cs, Science,
+English, Coding, Languages, CBSE,
+ICSE, GCSE, IB, etc.
+e.g. Quran → Tajweed → Beginner
+Sub-category Required
+Tajweed
+Status: Course Drap Created.
+Step 2 — Course Details
+Field Type / OpAons Notes
+Course name Text Required
+Short descrip>on Text, ~160 chars Required — used in search/lis>ng cards
+Detailed descrip>on Rich text Required
+Learning objec>ves Bullet list Required
+Prerequisites Text Op>onal
+Target age group Range picker Required
+Women-only checkbox Checkbox Op>onal — Hidayah Connect
+Teaching language Dropdown Required
+Thumbnail image Image upload Required
+Promo video Video upload Op>onal
+Save → Next.
+Step 3 — Course Type
+CONFIDENTIAL — Internal product/engineering specification | Page 10 of 49
+=== PAGE 11 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Type DuraAon Examples
+Workshop, Seminar, Webinar, Monthly-tui>on
+One-Time Session 1 day
+demo
+Short Course 2–15 days Ramadan Program, Tajweed Intensive
+Monthly Course 16–30 days Quran Reading, Arabic Learning
+1 / 2 / 3 / 6 / 9 / 12 months (custom
+Long-Term Course Hifz Program, Alimah Program, Advanced Tajweed
+dura>on allowed)
+The system automa>cally determines the payout model from this dura>on: ≤30 days → payout aher comple>on; >30 days →
+monthly milestone payout (see Sec>on 5).
+Step 4 — Course Structure
+Teacher defines modules and lessons, e.g. Module 1 – Introduc>on, Module 2 – Lesson 1, Module 3 – Lesson 2,
+Module 4 – Assessment, Module 5 – Comple>on. Each module can contain:
+● Video mee>ng
+● PDF
+● Notes
+● Homework
+● Quiz
+● Assignment
+● Downloadable files
+Step 5 — Schedule Setup
+Field Type / OpAons Notes
+Start date / End date Date pickers Required
+Days of week Mul>-select (e.g. Mon/Wed/Fri) Required
+Class dura>on 30 / 45 / 60 / 90 / 120 minutes Required
+Daily >me Time picker (e.g. 9:00–10:00 AM) Required
+Time zone Auto-selected, editable Required
+Smart Availability Engine (conflict checking)
+When a teacher selects a slot (e.g. 9–10 AM), the system checks exis>ng courses for a clash:
+● If already booked → shown as Unavailable and hidden from future selec>ons.
+● If free → Slot Available, selec>on allowed.
+● A teacher cannot have two live classes at the same >me.
+● A configurable buffer (e.g. 10–15 minutes) can be required between classes.
+● Timezone conversion for students is automa>c.
+● Recurring schedules reserve their slots un>l the course ends.
+● Edi>ng a course releases its old slots and revalidates the new ones.
+Step 6 — Student Capacity
+Teacher selects Maximum Students: 1 (Private), 5, 10, 20, 50, or Unlimited (if permiZed).
+Step 7a — Pricing
+CONFIDENTIAL — Internal product/engineering specification | Page 11 of 49
+=== PAGE 12 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Hourly / Monthly / Complete course
+Fee basis Required
+fee (e.g. ₹8,000)
+Full Payment (+GST on the plaLorm
+Student payment op>ons commission) / 3 Installments / 6 Teacher chooses which op>ons to offer
+Installments / Monthly Recurring
+Read-only, set by the course's
+Teacher receives 70% (HidayahConnect)
+PlaLorm commission PlaLorm (Step 1): HidayahConnect =
+or 72% (TeachUsConnect)
+30% · TeachUsConnect = 28%
+Discount / coupon Op>onal Teacher-configured
+Shown live as the teacher adjusts price
+— GST does not affect this figure, since
+GST is charged to the student on top of
+Es>mated earnings Auto-calculated, read-only
+the commission, not deducted from the
+teacher's share; see Sec>on 5.2 for the
+full worked calcula>on
+Step 7b — Demo Class ConfiguraAon
+This is where demo classes actually get configured — aZached directly to the course being priced, immediately
+aper Step 7a, so the teacher sets pricing and trial terms together. Full system-level rules are in Sec>on 4; this is the
+field-level view inside course crea>on.
+Field Type / OpAons Notes
+Draws from the teacher's shared one-
+Offer free demo for this course Toggle (on by default) >me quota of 3 free demo classes across
+all their courses — not a monthly reset
+Fixed at 30 minutes (read-only,
+Demo class dura>on Not teacher-configurable
+plaLorm default)
+If on, students can book a paid demo
+Allow paid demo aper free quota
+Toggle once the teacher's 3 free/month are
+used
+used up
+Shown to the teacher for transparency;
+Paid demo price ₹50 (plaLorm default, read-only)
+not editable at course level
+The free-demo quota is a one->me alloca>on per teacher (included with the one->me registra>on fee), not per course and not
+a monthly reset — confirmed: if a teacher runs 3 courses, all 3 draw from the same one->me pool of 3, they do not get 3
+demos for each course, and the pool does not refill each month.
+Step 7c — Video Recording Add-On
+This is where a teacher enables recording for the course being created — the step referenced but not detailed in
+the earlier version of this document.
+Field Type / OpAons Notes
+Enable recording for this course Toggle Off by default
+Read-only indicator: Ac>ve / Not Pulled from the teacher's account-level
+Recording Pass status
+Subscribed / Slots Full Recording Pass (Sec>on 4.4)
+BuZon, shown only if not already ₹199/month + GST — takes the teacher
+Subscribe to Recording Pass
+subscribed to checkout, then returns here
+CONFIDENTIAL — Internal product/engineering specification | Page 12 of 49
+=== PAGE 13 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+A Recording Pass covers up to 3 courses
+Read-only counter, e.g. “2 of 3 courses at once; if all 3 slots are full the teacher
+Course slot used
+used” must remove recording from another
+course first
+Enforced automa>cally once recording is
+Student cap for this recorded
+Read-only, fixed at 5 enabled — Step 6 capacity is overridden
+course
+downward to 5 if it was set higher
+IF the teacher tries to enable recording on a 4th course while all 3 slots are in use: show “Recording slots full — remove
+recording from another course or wait un>l next billing cycle” and block the toggle.
+Step 8 — Course Policies
+Field Type / OpAons Notes
+Reflects the Step 7b demo sevng,
+Free trial available Toggle
+shown here read-only for confirma>on
+Refund policy PlaLorm default, shown read-only PlaLorm rules apply
+Minimum aZendance required % (plaLorm default 70%) See Sec>on 5
+Cer>ficate issued on comple>on Toggle
+Assignment required Toggle
+Assessment required Toggle
+Step 9 — Review & Publish
+System validates before allowing submission:
+● Teacher verified
+● Profile complete
+● No schedule conflicts
+● Pricing valid
+● Course content complete
+● Thumbnail uploaded, descrip>on added
+● Dura>on and capacity selected
+● Payment op>ons selected
+If valida>on passes → Submit for Review. Status: Pending Admin Approval.
+Step 10 — Admin Review
+Admin reviews course quality, category, pricing, compliance, content appropriateness, schedule, and policy
+compliance. Ac>ons: Approve / Reject / Request Changes.
+IF Admin rejects: teacher is no>fied → edits the course → resubmits, back into the review queue.
+On Approve: Status becomes Course Live.
+Step 11 — Marketplace Publishing
+Once approved, the course appears in the marketplace. Students can search, filter, view details, compare, enroll,
+pay, and join classes.
+Step 12 — Assessment CreaAon (separate module, appears only aWer publishing)
+Once a course is live, the teacher gets access to Create Assessment, with types:
+● Quiz
+● MCQ Test
+CONFIDENTIAL — Internal product/engineering specification | Page 13 of 49
+=== PAGE 14 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+● Subjec>ve Assignment
+● Prac>cal Task
+● Oral Evalua>on
+● Homework
+● Final Examina>on
+● Comple>on Cer>ficate rules
+Assessments stay linked to the course and can be scheduled aper specific lessons or modules.
+CONFIDENTIAL — Internal product/engineering specification | Page 14 of 49
+=== PAGE 15 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+4. Demo Class System
+A feature to help students try a teacher before commivng to a full course. The numbers below are confirmed and
+locked as of the founder's review.
+4.1 Free Demo Quota (One-Time, Not Monthly)
+Parameter Value
+3, one->me — a single life>me alloca>on, not a monthly
+Free demo classes per teacher
+reset
+Demo class dura>on Fixed at 30 minutes (not teacher-configurable)
+The one->me ₹399 (HidayahConnect) / ₹499
+Included with (TeachUsConnect) / $9.99 (interna>onal) registra>on —
+no separate charge
+Never — once a teacher has used all 3, every further
+Resets
+demo is paid, permanently, for the life of their account
+This is a deliberate correc>on from an earlier drah of this spec, which incorrectly described the quota as resefng every month.
+It does not reset. A teacher gets 3 free demo classes total, ever, >ed to their one->me registra>on.
+4.2 Purchasing AddiAonal Demo Classes
+Once a teacher's 3 free (one->me) demo classes are used up, every demo aper that is paid, for as long as their
+account exists:
+Parameter Value
+Price per addi>onal demo class ₹50
+During course crea>on, Step 7b (Demo Class
+Configured
+Configura>on) — see Sec>on 3
+4.3 Where This Appears in the Product
+● Course Crea>on, Step 7b (Demo Class Configura>on): toggle to enable demo classes for this course —
+dura>on is fixed at 30 minutes — and, once the teacher's one->me free quota is exhausted, allow
+students to book a paid demo at ₹50.
+● Student Journey (Sec>on 6): “Book Trial” uses a free demo slot if the teacher s>ll has any of their one-
+>me 3 remaining, otherwise offers the ₹50 paid demo.
+● Teacher Wallet: tracks how many of the one->me 3 demo classes remain and any demo-class revenue
+collected.
+4.4 Recording Add-On
+Confirmed and locked:
+Parameter Value
+Price ₹199/month + GST
+CONFIDENTIAL — Internal product/engineering specification | Page 15 of 49
+=== PAGE 16 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Parameter Value
+Courses coverable per subscrip>on Up to 3 courses simultaneously
+Student cap per recorded course 5 students maximum
+Billing cycle Monthly
+Days 1-7: student + teacher access · Days 8-15: teacher-only ·
+Recording lifecycle
+Days 16-28: archived, no access · Day 29: permanently deleted
+CONFIDENTIAL — Internal product/engineering specification | Page 16 of 49
+=== PAGE 17 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+5. Class Delivery, Escrow & Payout
+5.1 From Purchase to Payout
+Student purchases course
+↓ Payment (Razorpay / Stripe)
+↓ Money goes into Hidayah Connect Escrow Wallet (not the teacher wallet)
+↓ Student joins class(es)
+↓ AZendance recorded each session
+↓ Teacher completes class / course
+↓ Student confirms comple>on
+↓ Money remains in escrow through the refund window
+↓ Refund window ends
+↓ PlaLorm commission deducted
+↓ Teacher earnings calculated and transferred to Teacher Wallet
+↓ Teacher requests withdrawal
+↓ Admin approves
+↓ Bank transfer
+↓ Completed
+5.2 GST Treatment on PlaGorm Commission
+GST is charged only on the plaLorm's commission — never on the course fee itself, and never on the teacher's
+share. The teacher's payout (70% for HidayahConnect, 72% for TeachUsConnect) is calculated purely from the
+course fee and is unaffected by GST. The two plaLorms carry different commission rates, so the GST amount
+differs between them even for an iden>cal course fee — both worked below.
+HidayahConnect example (30% commission)
+Item Amount
+Course fee (example) ₹100.00
+Teacher share — 70% (no GST applied) ₹70.00
+PlaLorm commission — 30% ₹30.00
+GST on commission — 18% of ₹30 ₹5.40
+CONFIDENTIAL — Internal product/engineering specification | Page 17 of 49
+=== PAGE 18 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Item Amount
+Total charged to the student ₹105.40
+TeachUsConnect example (28% commission)
+Item Amount
+Course fee (example) ₹100.00
+Teacher share — 72% (no GST applied) ₹72.00
+PlaLorm commission — 28% ₹28.00
+GST on commission — 18% of ₹28 ₹5.04
+Total charged to the student ₹105.04
+The GST amount (₹5.40 vs ₹5.04) is what the pla@orm collects from the student and remits to the government — it is not
+addi>onal pla@orm revenue in either case. The pla@orm's actual commission revenue is exactly the commission line above,
+matching the unit economics used in the business plan.
+This same logic — GST on the commission por>on only, added on top of the course fee, teacher's share untouched
+— applies uniformly to every payout model below, using each plaLorm's own commission rate.
+DomesAc (India / Razorpay) vs. InternaAonal (Stripe)
+The 18% figure above applies to domes>c transac>ons processed through Razorpay. For interna>onal transac>ons
+processed through Stripe, tax is calculated automa>cally by Stripe based on the payer's registered loca>on (Stripe
+Tax) rather than a fixed 18% — Stripe determines and applies whatever tax rate is correct for that student's or
+teacher's jurisdic>on.
+Installments & Recurring Plans Are Always Paid Upfront
+Every payment plan — Full Payment, 3 Installments, 6 Installments, or Monthly Recurring — is pre-paid: the
+student always pays for a period (e.g. the next month, or the next quarter) in advance, before that period of
+teaching happens, never billed aperward. GST is calculated the same way on every one of these upfront
+payments: 18% of that payment's commission slice only, never of the full payment amount. Full Payment,
+Quarterly, and Half-Yearly are simply different upfront period lengths a teacher can offer — the student always has
+the choice of a single one-shot payment or a periodic upfront plan.
+5.3 Akendance ValidaAon
+A session counts toward comple>on only if minimum 70% aZendance is recorded, based on teacher join >me,
+student join >me, and session dura>on (e.g. a 60-minute class requires at least 42 minutes).
+5.4 Short Course Payout Model (≤30 days)
+Example (HidayahConnect, 30% commission): student's course fee is ₹5,000. PlaLorm commission (30%): ₹1,500.
+GST on commission (18% of ₹1,500): ₹270. Total charged to the student: ₹5,270. Teacher receives: ₹3,500 —
+unaffected by GST. Release: aper course comple>on (one-day courses release 2 hours aper comple>on).
+Same mechanics on TeachUsConnect, using its 28% commission instead — see Sec>on 5.2 for the side-by-side GST comparison.
+5.5 Long Course Payout Model (>30 days)
+CONFIDENTIAL — Internal product/engineering specification | Page 18 of 49
+=== PAGE 19 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Example (HidayahConnect, 30% commission): a 6-month course at ₹6,000 total is divided into 6 monthly
+milestones of ₹1,000 each. Each month: commission (30%) = ₹300, GST on that month's commission (18% of
+₹300) = ₹54, so the student's monthly charge is ₹1,054. Aper that month completes, the teacher receives ₹700 —
+unaffected by GST. Payout releases monthly; future months stay locked un>l delivered.
+5.6 PlaGorm Default Rules
+PlaGorm Course ≤ 30 Days Course > 30 Days
+Hidayah Connect Payout aper comple>on Monthly milestone payout
+Monthly milestone payout (default
+TeachUs (monthly tui>on model) —
+release every month)
+5.7 Teacher Wallet
+Shows Available Balance, Pending Balance, Locked Balance, Withdrawn Balance, Commission Deducted, and
+Withdrawal History. Minimum withdrawal: ₹500. Withdrawal flow: Teacher requests → bank verifica>on → TDS
+applied → seZlement → completed.
+5.8 Student ProtecAon
+If a teacher stops teaching mid-course, remaining locked funds stay protected — refundable to the student or
+transferable to another teacher. Released payments cannot be reversed; the plaLorm fee is non-refundable.
+CONFIDENTIAL — Internal product/engineering specification | Page 19 of 49
+=== PAGE 20 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+6. Complete Student Journey
+This sec>on was previously a high-level flow only. It now covers registra>on fields, the student profile/sevngs
+screen (including payment-method linking), the dashboard, discovery and booking, and everything a student sees
+and does aper enrolling — analy>cs, aZendance, assessments, and messaging with their teacher.
+6.1 Student RegistraAon
+Field Type / OpAons Notes
+Full name Text Required
+Email address Email, verified via OTP Required, unique
+Mobile number Phone, verified via OTP Required, unique
+Required — determines currency &
+Country Dropdown
+payment gateway
+Required — determines whether parent
+Date of birth Date
+consent is triggered
+Parent / guardian name Text Required only if student is under 18
+Required only if student is under 18 —
+Parent / guardian email or mobile Email / Phone, verified via OTP triggers the full Parent Consent flow in
+Sec>on 8
+Password Password + confirm Required
+On submit: status becomes Enrollment Status = Ac>ve. Student is taken to the dashboard.
+IF the student is under 18: registra>on cannot complete un>l a parent/guardian has confirmed consent via their own OTP-
+verified email or mobile — see Sec>on 8 for the complete parent consent and approval flow.
+6.2 Student Profile & Senngs
+Accessible from the dashboard at any >me. This is where the student manages their own details and payment
+setup — the piece missing from the previous version of this document.
+Field Type / OpAons Notes
+Student ID System-generated, read-only Sec>on 15.3
+Same as registra>on; email/mobile
+Name / Email / Mobile / Country Editable text fields
+changes require re-verifica>on via OTP
+Profile photo Image upload Op>onal
+Time zone Auto-detected, editable Used for class scheduling display
+Editable only by the linked parent/
+Parent consent status Read-only: Yes / No / Pending guardian account (Sec>on 8), not the
+student
+CONFIDENTIAL — Internal product/engineering specification | Page 20 of 49
+=== PAGE 21 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Required before enabling auto-pay; the
+Card / UPI / Netbanking (via Razorpay) plaLorm stores a payment token, not
+Saved payment method
+or Card / Bank (via Stripe), tokenized raw bank details, per Razorpay/Stripe
+standards
+When on, future installments or monthly
+Auto-pay for installments /
+Toggle tui>on charge automa>cally to the saved
+monthly recurring
+payment method on the due date
+Toggles per channel (Email / SMS /
+No>fica>on preferences Op>onal
+WhatsApp / Push)
+Change password Current password + new password Op>onal
+Delete account BuZon, confirma>on required See Sec>on 14 Edge Cases
+“Link bank account” is implemented as linking a payment method through Razorpay (India) or Stripe (interna>onal) rather
+than storing raw bank account numbers directly — this matches how teacher payouts are already architected in Sec>on 5 and
+keeps the pla@orm out of scope for handling bank creden>als itself.
+6.3 Student Dashboard
+The student's home screen aper login. Contains:
+Module Module Module
+My Courses Upcoming Classes Messages
+Analy>cs AZendance Assessments & Grades
+Cer>ficates Wallet / Payment History Wishlist / Saved Teachers
+No>fica>ons Support Sevngs (Sec>on 6.2)
+The Support module is where a student raises a help >cket for any issue — see Sec>on 13 for the full >cke>ng system.
+6.4 Discovery & Booking
+Google search
+↓ Website
+↓ Browse courses
+↓ Search
+↓ Apply filters (gender of teacher — mandatory — plus subject, country, language, price range, ra>ng)
+↓ View teacher profile
+↓ Read reviews
+↓ Book trial / demo class (uses teacher's free quota, or ₹50 paid demo if quota exhausted — Sec>on 4)
+CONFIDENTIAL — Internal product/engineering specification | Page 21 of 49
+=== PAGE 22 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+↓ Purchase full course
+↓ Payment → escrow (Sec>on 5.1)
+Field Type / OpAons Notes
+Auto-calculated from course price and Full / 3 Installments / 6 Installments /
+Course fee
+chosen payment op>on Monthly Recurring, per Sec>on 3 Step 7a
+Auto-calculated: 18% of the
+Shown as a separate line item at
+commission por>on only (30% for
+GST on plaLorm commission checkout — see Sec>on 5.2 for the
+Hidayah Connect, 28% for TeachUs),
+worked example
+not of the full course fee
+What is actually charged to the student's
+Total amount charged Course fee + GST on commission
+payment method
+Saved method from Sec>on 6.2, or
+Payment method Required
+add a new one at checkout
+Enrollment status Enrolled / Pending Payment / Failed Drives what shows in My Courses
+6.5 Post-Enrollment: Akendance, AnalyAcs & Assessments
+Once enrolled, a course appears in My Courses with its own detail page containing:
+Field Type / OpAons Notes
+Pulled from the course's schedule
+Class schedule Calendar view, read-only
+(Sec>on 3, Step 5)
+Ac>ve only within the scheduled
+Join class buZon Launches the live class
+window
+Per-session: Present / Absent / %
+AZendance record Calculated per Sec>on 5.3's 70% rule
+aZended
+Modules completed, >me spent, Read-only, auto-updated as the student
+Progress / analy>cs
+streak progresses
+Matches modules configured in Sec>on
+Homework & assignments List with Submit ac>on per item
+3, Step 4
+Score, teacher feedback, pass/fail per Matches assessment types configured in
+Assessment results
+assessment Sec>on 3, Step 12
+Appears only if the course has
+Cer>ficate Download buZon cer>ficate-on-comple>on enabled and is
+complete
+Rate & review teacher Star ra>ng + text review Available aper course comple>on
+6.6 Messaging with Teacher
+Available from a course detail page or the teacher's profile, and from the Messages module on the dashboard.
+CONFIDENTIAL — Internal product/engineering specification | Page 22 of 49
+=== PAGE 23 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+One thread per student-teacher pair, Persists across the whole course, not just
+Message thread
+scoped to a course where relevant one session
+Text field + op>onal file/image
+Compose message Required: message body
+aZachment
+Delivers message and triggers a
+Send buZon
+no>fica>on to the teacher (Sec>on 12)
+Shows when the teacher has seen the
+Read receipt Read-only indicator
+message
+Flow: student clicks Message → thread opens (or is created if this is the first message) → student types and sends
+→ teacher receives a no>fica>on (Email/SMS/WhatsApp/Push per Sec>on 12) → teacher opens Messages on their
+own dashboard and replies → student is no>fied of the reply.
+IF the student is under 18: message threads should be visible to the linked parent/guardian account as well, consistent with the
+Student Safety System's supervision requirements (Sec>on 6.7).
+6.7 Student Safety System (mandatory for Hidayah Connect)
+● Parent consent required for students under 18
+● Teacher Code of Conduct and Student Code of Conduct
+● Class recording consent
+● Report Teacher / Report Student
+● Safety escala>on workflow
+See Sec>on 7 for what happens on the teacher's side once a student enrolls, and Sec>on 8 for the complete parent/guardian
+journey, including consent, approvals, and communica>on.
+CONFIDENTIAL — Internal product/engineering specification | Page 23 of 49
+=== PAGE 24 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+7. Teacher Journey — AWer a Student Enrolls
+This is the piece missing from the earlier version of this document: what the teacher actually sees and does once a
+student books a demo or purchases a course. It picks up the moment Sec>on 6.4's “Payment → escrow” step
+completes.
+7.1 New Enrollment NoAficaAon & Student List
+The moment a student books a demo or purchases a course, the teacher is no>fied (Email/SMS/WhatsApp/Push,
+per Sec>on 12) and the student appears in the teacher's Students module.
+Field Type / OpAons Notes
+Student name Read-only
+Enrolled course(s) Read-only, links to each course
+Enrollment date Read-only
+Reflects Sec>on 3 Step 7a payment
+Payment / installment status Read-only: Paid / Par>al / Overdue
+op>on chosen
+AZendance % Read-only, auto-calculated Sec>on 5.3
+Progress % Read-only, auto-calculated Modules completed
+Read-only, shown only if student is
+Parent/guardian contact Sec>on 8
+under 18
+Opens the thread with this student
+Message buZon Sec>on 7.4
+(and parent, if applicable)
+7.2 ConducAng Classes & Marking Akendance
+Teacher opens Upcoming Classes
+↓ Joins the live class at the scheduled >me
+↓ Conducts the class
+↓ System auto-records join/leave >me and dura>on per student
+↓ Teacher reviews and confirms aZendance
+↓ Class marked Completed once the 70% aZendance rule is met (Sec>on 5.3)
+Field Type / OpAons Notes
+Read-only, one row per enrolled
+Student name
+student
+Auto-recorded join >me / leave
+Read-only Sec>on 5.3
+>me / dura>on
+CONFIDENTIAL — Internal product/engineering specification | Page 24 of 49
+=== PAGE 25 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Present / Absent, pre-filled from auto-
+AZendance status Teacher can override
+recorded dura>on
+Required if teacher changes the auto-
+calculated status — logged for the IF-
+Manual override reason Text field condi>on in Sec>on 10 (student marked
+absent but teacher marked present →
+Admin Review)
+7.3 Homework, Assignments & Assessments
+For any course with assignments/assessments enabled (Sec>on 3, Steps 4 and 12), the teacher's course detail
+page shows a review queue:
+Field Type / OpAons Notes
+Student name, item name, submiZed
+Submission list
+date, status (Pending / Graded)
+Open submission File/text viewer
+Number or pass-fail, per the
+Grade / score Sec>on 3 Step 12
+assessment type configured
+Feedback Text field Op>onal but recommended
+BuZon — releases the grade to the
+Publish grade student's Assessment Results (Sec>on
+6.5)
+7.4 Messaging with Students & Parents
+Mirrors the student-side messaging in Sec>on 6.6, from the teacher's side.
+Field Type / OpAons Notes
+One per student (or per parent, if the
+Message thread Sec>on 8.4
+message is parent-ini>ated)
+Read-only badge shown on a thread Reflects that the parent can also see and
+Parent-CC indicator
+when the student is under 18 post in this thread
+Compose / send Same as Sec>on 6.6
+7.5 Demo-to-Full-Course Conversion
+Aper a student completes a demo class, the teacher can invite them to enroll in the full course directly from the
+student's record.
+Field Type / OpAons Notes
+Send enrollment offer BuZon on the student's demo record
+CONFIDENTIAL — Internal product/engineering specification | Page 25 of 49
+=== PAGE 26 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Text field, pre-filled with a default
+Offer message Editable
+template
+Discount code (op>onal) Text field Op>onal
+On send: student (and parent, if under 18, per Sec>on 8.3) receives a no>fica>on with a link straight into the
+Sec>on 6.4 purchase flow for that course.
+7.6 Payout Impact
+Every enrollment feeds directly into the escrow and payout mechanics already described in Sec>on 5 — this
+sec>on exists purely to close the loop: aZendance marked here (7.2) is what the Sec>on 5.3 aZendance rule
+checks, and grades/comple>ons recorded here (7.3) are what trigger the milestone releases in Sec>on 5.4/5.5.
+CONFIDENTIAL — Internal product/engineering specification | Page 26 of 49
+=== PAGE 27 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+8. Parent / Guardian Journey & Approval Flow
+This is deliberately the lightweight version: no separate parent portal or dashboard to build. A parent gets access
+using their own registered mobile number, reusing the same login and screens the student already has, gated to
+what a parent should see. This keeps the engineering scope small while s>ll covering consent, approval, and direct
+communica>on with the teacher.
+8.1 Parent Consent at Student RegistraAon
+Triggered automa>cally the moment a student's date of birth (Sec>on 6.1) indicates they are under 18.
+Field Type / OpAons Notes
+Parent/guardian full name Text Required
+Dropdown (Parent / Legal Guardian /
+Rela>onship to student Required
+Other)
+Required, independently verified — not
+just re-using the student's contact. This
+Parent mobile number Phone, verified via OTP
+number is what the parent later logs in
+with (Sec>on 8.2)
+Consent checkbox — Terms &
+Checkbox Required
+Student Code of Conduct
+Consent checkbox — Class Required if the teacher/course has
+Checkbox
+Recording Consent recording enabled (Sec>on 4.4)
+On submit: Parent Consent Status becomes Yes, and only then does the student's registra>on (Sec>on 6.1) or a
+pending course purchase (Sec>on 8.3) proceed. Every future purchase will require the parent's approval — this is
+not a toggle the parent can turn off (Sec>on 8.3).
+IF the parent does not complete this step: the student's account remains at Enrollment Status = Pending Consent and cannot
+book a demo or purchase a course. No separate password is set here — the parent's registered mobile number (with OTP) is
+their login creden>al, per Sec>on 8.2.
+8.2 Parent Access (Shared Login — No Separate Portal)
+A parent does not get a dis>nct portal or dashboard build. Instead, they log in on the same screen a student
+would, using their own registered mobile number and an OTP. The system recognizes that number as a linked
+parent (from Sec>on 8.1) and opens the same course detail, aZendance, analy>cs, assessment, and messaging
+screens already specified for students in Sec>ons 6.3–6.6 — scoped to the linked child, with the purchase-and-
+payment ac>ons replaced by the approval flow in Sec>on 8.3 instead of a direct “buy” buZon.
+This reuses every screen already specified for the student side (Sec>ons 6.3–6.6) rather than requiring the dev team to design
+and build a second, parallel interface — the only new pieces are the mobile-number-based parent login check and the approval
+gate in Sec>on 8.3.
+Because the parent logs in with their own mobile number rather than the student's creden>als, this is a separate
+account — a parent can be logged in at the same >me as their child without conflic>ng with the single-ac>ve-
+session rule that applies to a student's or teacher's own login (Sec>on 10).
+8.3 What Requires Parent Approval
+CONFIDENTIAL — Internal product/engineering specification | Page 27 of 49
+=== PAGE 28 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Confirmed: every paid purchase requires parent approval, every >me — not just once at registra>on. This keeps
+the rule simple (one gate, not a >ered permission system to build) and gives parents the most control.
+AcAon Approval Required? Flow
+Ini>al student registra>on Yes, always Sec>on 8.1 — blocks registra>on un>l complete
+Student selects a course → “Request sent to parent”
+SMS/no>fica>on → parent approves or declines via a
+Any paid course purchase Yes, every >me link in that no>fica>on → if approved, payment is
+charged to the parent's saved payment method → if
+declined, student is no>fied
+Only the parent can add or change the payment
+Linking / changing the saved
+Yes, always method used for a purchase or auto-pay — not the
+payment method
+student, refining the assump>on in Sec>on 6.2
+Routes through the same approval flow as any other
+Teacher's demo-to-full-
+Yes, every >me purchase above — one consistent gate rather than a
+course offer (Sec>on 7.5)
+separate path for offers
+8.4 Parent CommunicaAon with Teacher
+A parent can view every message thread involving their child, and can message the teacher directly — the same
+mechanics as Sec>on 6.6/7.4, with the parent as an addi>onal par>cipant on the thread.
+Field Type / OpAons Notes
+Same thread the student and teacher
+Message thread use — parent is added as a
+par>cipant, not a separate thread
+Compose / send Same fields as Sec>on 6.6
+Automa>c, same no>fica>on paZern
+No>fy teacher of parent message as Sec>on 12, with a “from Parent”
+label
+8.5 NoAficaAons to Parent
+Every major event affec>ng the child triggers a parallel no>fica>on to the parent, in addi>on to the student, using
+the same mul>-channel paZern as Sec>on 12:
+● New enrollment or demo booking
+● Payment charged or payment failed
+● AZendance flag (e.g. repeated absence)
+● New message from the teacher
+● Assessment result published
+● Cer>ficate earned
+8.6 Revoking Consent & Account DeleAon
+CONFIDENTIAL — Internal product/engineering specification | Page 28 of 49
+=== PAGE 29 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+IF a parent revokes consent: the student's account is suspended from new enrollments and purchases un>l
+consent is renewed; courses already in progress con>nue under the standard refund policy (Sec>on 11), and the
+change is escalated to Admin for review (Sec>on 9.5).
+IF a parent requests full dele>on of the child's account: this follows the same process as the “Student deletes
+account” edge case (Sec>on 14), ini>ated by the parent rather than the student.
+CONFIDENTIAL — Internal product/engineering specification | Page 29 of 49
+=== PAGE 30 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+9. Administrator Journey
+9.1 Admin Dashboard Modules
+Module Module Module
+Overview Pending Teachers Pending Students
+Pending Courses Live Classes Disputes
+Refund Requests Escrow Wallet
+Revenue Commission Subscrip>ons
+Reports Cer>ficates Ins>tutes
+Support Tickets No>fica>ons CMS
+Sevngs
+The Support Tickets module is the admin queue for the >cke>ng system specified in full in Sec>on 13.
+9.2 Teacher Approval Sub-Flow
+View Teacher
+↓ Documents
+↓ Background Verifica>on
+↓ Decision: Approve / Reject / Ask for More Documents / Suspend / Blacklist
+Field Type / OpAons Notes
+Read-only: name, contact, country,
+Teacher summary
+category, submiZed date
+Inline preview of iden>ty +
+Document viewer Sec>on 2.2 Steps D & E
+qualifica>on uploads
+Read-only checkboxes: Email /
+Verifica>on checklist Mobile / Profile / Iden>ty / Payout / Mirrors Sec>on 2.3
+Qualifica>on (op>onal)
+Approve / Reject / Request More
+Decision Required
+Info / Suspend / Blacklist
+Rejec>on reason Text field Required if Decision = Reject
+9.3 Course Approval Sub-Flow
+Admin reviews course quality, category, pricing, compliance, content appropriateness, schedule, and policy
+compliance (see Sec>on 3, Step 10), then Approves, Rejects, or Requests Changes.
+CONFIDENTIAL — Internal product/engineering specification | Page 30 of 49
+=== PAGE 31 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Read-only: name, teacher, category,
+Course summary Pulled from Sec>on 3, Steps 1–8
+price, schedule, capacity
+So admin can confirm the recording slot
+Recording / demo configura>on Read-only view of Step 7b/7c sevngs cap and demo pricing are correctly
+applied
+Decision Approve / Reject / Request Changes Required
+Rejec>on / change-request
+Text field Required if not Approve
+reason
+9.4 Escrow, Refund & Dispute Management
+Admin has full visibility into escrow balances, pending/released payouts, refund requests, and disputes, and is the
+final decision-maker on refund approvals (Sec>on 11) and disputed escrow releases.
+Field Type / OpAons Notes
+Read-only, filterable by teacher/
+Escrow balance view
+course/student
+List with student, course, reason,
+Refund request queue Sec>on 11
+evidence, status
+Decision Approve Refund / Reject Refund Required
+Dispute notes Text field, internal Op>onal, for audit trail
+9.5 Student & Parent Management
+Field Type / OpAons Notes
+Filterable by status, country,
+Student list
+enrollment
+Read-only: profile fields from Sec>on
+6.2, enrollment history, payment
+Student detail view
+history, message threads (for safety
+review)
+Read-only: consent status, consent
+Linked parent/guardian detail Shown on any student under 18
+date, approval sevngs (Sec>on 8.3)
+Suspend / reinstate student Ac>on buZon + reason field Used for Code of Conduct viola>ons
+Queue item, appears when a parent Admin confirms the account is correctly
+Review consent revoca>on
+revokes consent (Sec>on 8.6) restricted
+CONFIDENTIAL — Internal product/engineering specification | Page 31 of 49
+=== PAGE 32 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+10. CondiAonal / IF-ELSE Flows
+Every condi>on below must be explicitly handled in the build — these are the scenarios most likely to be missed if
+not documented up front.
+CondiAon Then
+Show Login (not registra>on) — landing page always shows both
+Teacher already has an account
+op>ons clearly
+Forgot password OTP → Reset Password
+Teacher rejected at admin review Reason shown → upload new documents → resubmit
+Admin rejects a course Teacher no>fied → edit course → resubmit
+Payment failed Retry → try a different payment method → or cancel
+Student marked absent but teacher marked
+Goes to Admin Review for resolu>on
+them present
+Teacher absent for a scheduled class Student refunded → teacher penalty applied → wallet adjustment
+Student no>fied → reschedule offered → refund if not rescheduled
+Teacher cancels a class
+→ wallet update
+Refund policy applied → cancella>on charges if applicable → wallet
+Student cancels
+update
+Single ac>ve session enforced per account — the previous device is
+automa>cally logged out and the new device becomes ac>ve. This
+Teacher or student logs in on a new device
+does not affect a linked parent's login (Sec>on 8.2), which is a
+while already logged in elsewhere
+separate account and can be ac>ve at the same >me without
+restric>on.
+11. Refund Policy
+This sec>on is the full refund policy — not just the technical flow. It's wriZen to double as the actual customer-
+facing text for the Teacher FAQ and Student FAQ, so the wording here should be treated as close to final as the
+underlying numbers allow. Five specific numbers below were never defined anywhere else in this spec; each is
+marked “DECISION NEEDED” with a proposed default. Everything else is drawn directly from the escrow, payout,
+and dispute mechanics already specified in Sec>ons 5, 9, and 13.
+11.1 How Payment Is Protected
+When a student pays for a class or course, the money doesn't go directly to the teacher — it's held in escrow un>l
+the class is actually delivered (Sec>on 5.1). This is what makes refunds possible at all.
+● One->me session or short course (up to 30 days): payment is held un>l the course is marked complete.
+● Monthly or long-term course: payment is split by month — only the month currently being taught is at
+risk; every future month stays fully protected in escrow un>l it's actually delivered (Sec>on 5.5).
+Once a payment is released to a teacher — aper successful delivery and the refund window (11.6) has passed — it
+can no longer be refunded through this policy (Sec>on 5.8).
+CONFIDENTIAL — Internal product/engineering specification | Page 32 of 49
+=== PAGE 33 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+11.2 Teacher RegistraAon Fee — Non-Refundable
+The one->me teacher registra>on fee — ₹399 (HidayahConnect, India) / ₹499 (TeachUsConnect, India) / $9.99
+(interna>onal, both plaLorms) — is non-refundable once payment completes. This fee covers life>me marketplace
+access, not a specific class or course, so it isn't eligible for a refund even if a teacher later decides not to teach.
+11.3 Course & Class Fee Refunds
+One-Time Sessions & Short Courses (1-30 days)
+● Full refund if the teacher cancels the class and the student doesn't accept a reschedule.
+● Full refund if the teacher doesn't show up for a scheduled class.
+● If the student cancels before the class or course starts, see 11.4 for the cutoff that determines a full or no
+refund.
+● Once the class or course is marked complete and the refund window (11.6) has passed, payment releases
+to the teacher and is no longer refundable.
+Monthly & Long-Term Courses (31 days - 12 months)
+● Billed and released one month at a >me (Sec>on 5.5).
+● If a student stops partway through, every month that hasn't happened yet is s>ll in escrow and fully
+refundable.
+● A month already delivered and released to the teacher is not refundable, even if the student cancels the
+rest of the course.
+Installment & Monthly Recurring Payments
+● If a student cancels, any installment already paid for classes that haven't happened yet is refunded from
+escrow.
+● Any future installment that hasn't been charged yet simply isn't collected — there's nothing to refund
+there.
+11.4 When a Refund Applies
+SituaAon Outcome
+Full, automa>c refund for that class — see Scenario 2, Sec>on
+Teacher doesn't show up for a scheduled class
+16
+Student is offered a reschedule first; if they decline or none
+Teacher cancels a class
+works, full refund
+Student cancels with enough no>ce (see cutoff
+Full refund
+below)
+Student cancels aper the cutoff, or aper the class has
+See cutoff decision below
+started
+A plaLorm-side technical failure prevents the class
+Full refund
+happening
+Student was charged twice for the same booking
+Full refund of the duplicate charge, automa>cally
+(duplicate payment)
+Recording feature doesn't work as purchased Reviewed case-by-case via a Support >cket (Sec>on 13)
+DECISION NEEDED — Student cancella>on cutoff. Proposed: full refund if the student cancels more than 24 hours before the
+scheduled class; no refund if they cancel within 24 hours of the scheduled start, since the teacher has likely already turned
+CONFIDENTIAL — Internal product/engineering specification | Page 33 of 49
+=== PAGE 34 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+away other bookings for that slot. This mirrors common prac>ce on similar pla@orms, but was never set anywhere in the
+exis>ng spec — please confirm the 24-hour figure, or specify a different one.
+11.5 How a Refund Is Requested and Decided
+Student opens My Courses, selects the class or course, and chooses Request Refund — or raises it directly through
+Help / Support (SecAon 13.1) under the “Payment Issue” or “Dispute” category
+↓ States the reason, aZaches a screenshot or other evidence if available
+↓ Admin may ask the teacher to respond before making a decision
+↓ Admin decision: Approved → Escrow Refund to student. Rejected → funds released to teacher as originally scheduled
+↓ Student is no>fied of the outcome (Sec>on 12)
+DECISION NEEDED — Refund decision >meline. Proposed: 5 business days from when the student raises the request to when a
+decision is given. Not previously defined — confirm this works, or specify a different number to commit to publicly.
+11.6 Refund Window
+DECISION NEEDED — Refund window length. Proposed: refunds must be requested within 7 days of a class or course (or course
+month) being marked complete. Aher 7 days, payment automa>cally releases to the teacher and can no longer be refunded
+through this policy. This number wasn't set anywhere in the exis>ng spec, which only says a “refund window” exists before
+escrow releases (Sec>on 5.1) — please confirm 7 days, or specify a different number. Whatever is chosen here should be
+enforced by the app, not just stated in the policy.
+11.7 Demo Classes
+DECISION NEEDED — Demo class refund treatment. Proposed: demo classes (a teacher's one->me alloca>on of 3 free classes
+— see Sec>on 4.1, this is NOT a monthly benefit — or the ₹50 paid demo once that one->me quota is used) are not eligible for
+a cash refund, given how low the cost is. If a demo doesn't happen because the teacher didn't show up, the student receives a
+replacement demo credit instead of a cash refund. This wasn't addressed anywhere in the exis>ng spec — please confirm this
+approach, par>cularly whether the ₹50 paid demo should be treated the same as the free ones.
+11.8 Video Recording Pass
+DECISION NEEDED — Recording Pass refund treatment. Proposed: the ₹199/month Recording Pass is non-refundable once a
+billing period has started, since recording access for that month has already been enabled. A teacher can cancel any>me to
+stop future billing, but the current month already paid for isn't refunded partway through. Not addressed in the exis>ng spec
+— please confirm.
+11.9 PlaGorm Fees Are Never Refundable
+Even when a course fee is refunded, the plaLorm's commission and any GST already charged on that commission
+(Sec>on 5.2) are not refunded — only the amount that would otherwise have gone to the teacher is returned to
+the student. This matches the exis>ng payments spec, which states plaLorm fees are non-refundable (Sec>on
+5.8).
+11.10 How Refunds Are Paid
+Refunds go back to the student's original payment method — Razorpay for India, Stripe for interna>onal payments
+— and typically reflect within 5-7 business days, depending on the bank or card provider.
+CONFIDENTIAL — Internal product/engineering specification | Page 34 of 49
+=== PAGE 35 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+11.11 Disputes
+If a student disagrees with a refund decision, they can escalate through the same Support >cket (Sec>on 13)
+rather than opening a new one — see Scenario 8, Sec>on 16, for a worked example.
+11.12 Summary — Decisions Needed Before Publishing
+Everything else in this policy is drawn directly from the exis>ng product spec. These five numbers are not —
+please confirm or change each one before this goes live to teachers and students:
+# Decision Proposed Default
+24 hours before the scheduled
+1 Student cancella>on cutoff for a full refund (11.4)
+class
+2 Refund decision >meline (11.5) 5 business days
+3 Refund request window aper class/course comple>on (11.6) 7 days
+No cash refund; replacement
+4 Demo class refund treatment (11.7)
+credit if the teacher no-shows
+Non-refundable once a billing
+5 Recording Pass refund treatment (11.8)
+month has started
+CONFIDENTIAL — Internal product/engineering specification | Page 35 of 49
+=== PAGE 36 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+12. NoAficaAons Matrix
+Every meaningful ac>on triggers a no>fica>on across all channels. Example — Teacher Registered:
+Teacher Registered
+↓ Email
+↓ SMS
+↓ WhatsApp
+↓ Push No>fica>on
+↓ Admin No>fica>on
+The same mul>-channel paZern (Email / SMS / WhatsApp / Push / relevant Admin alert) should apply to every
+status change referenced elsewhere in this document — approvals, rejec>ons, payments, payouts, refunds, and
+disputes. This includes every >cket status change in the Support Ticke>ng System (Sec>on 13): >cket created (to
+admin), and In Progress / Resolved / Closed (to the user who raised it).
+CONFIDENTIAL — Internal product/engineering specification | Page 36 of 49
+=== PAGE 37 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+13. Support & TickeAng System
+This is the general-purpose resolu>on mechanism referenced by “Support” on the teacher dashboard (Sec>on
+2.4), “Support” on the student dashboard (Sec>on 6.3), and “Support Tickets” on the admin dashboard (Sec>on
+9.1) — those modules were named but never specified in detail un>l now. Rather than building a separate
+resolu>on path for every edge case in Sec>on 14, most issues that a person (not the system) needs to look at flow
+through this single >cke>ng system, so the dev team builds one queue and one review screen for admin instead of
+many one-off flows.
+13.1 Raising a Ticket
+Available from the Help / Support module on both the teacher and student dashboards, and contextually from
+specific screens (e.g. a failed payment, a course showing a technical issue) with the relevant record pre-filled.
+Field Type / OpAons Notes
+Dropdown: Payment Issue / Payout
+Issue / Technical or Recording Issue /
+Category Required
+Account Issue / Course or Enrollment
+Issue / Dispute / Other
+Auto-filled if raised contextually
+Helps admin locate the issue
+Related record (Course ID / Payment ID / Payout ID);
+immediately
+otherwise op>onal
+Subject Text Required
+Descrip>on Long text Required
+Image/file upload (e.g. screenshot,
+AZachments Op>onal
+payment receipt)
+Auto-suggested from category (e.g.
+Priority Payment/Payout Issue defaults to Required
+High), editable
+On submit: a Ticket ID is generated, the user gets a confirma>on, and admin is no>fied (Sec>on 12 paZern) with
+the >cket appearing in their Support Tickets queue.
+13.2 Admin Ticket Queue & ResoluAon
+Field Type / OpAons Notes
+Filterable by status, category, priority,
+Ticket list
+raised-by type (student/teacher)
+All fields from Sec>on 13.1, plus the
+requester's profile and the related
+Ticket detail
+record's detail (e.g. the actual
+payment or payout)
+Open / In Progress / Awai>ng User
+Status Required
+Response / Resolved / Closed
+Assigned to Admin/support staff member Op>onal
+CONFIDENTIAL — Internal product/engineering specification | Page 37 of 49
+=== PAGE 38 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field Type / OpAons Notes
+Internal notes Text, admin-only Not visible to the user
+Text, visible to the user once marked
+Resolu>on notes Required to close a >cket
+Resolved
+Flow: Admin opens the >cket → reviews the related record → takes any direct plaLorm ac>on needed (e.g.
+manually releasing a stuck escrow payout, correc>ng a duplicate charge, re-triggering a failed course enrollment)
+→ adds resolu>on notes → marks Resolved → user is no>fied and can reopen the >cket if unsa>sfied within a set
+window, aper which it auto-closes.
+Disputes that already have a dedicated flow — refunds (Sec>on 11) and escrow disputes (Sec>on 9.4) — can s>ll be raised as
+>ckets for visibility and tracking, but the actual decision con>nues to go through those exis>ng admin screens rather than
+being re-built inside the >cket itself.
+13.3 Ticket Categories → ExisAng SecAons
+Category Routes to / Related SecAon
+Payment Issue (e.g. duplicate payment, payment Admin reviews the Payment table (Sec>on 15.6) directly from
+succeeded but enrollment failed) the >cket
+Admin reviews the Payout table (Sec>on 15.7) and Teacher
+Payout Issue (e.g. failed payout)
+Wallet (Sec>on 5.7)
+Technical / Recording Issue (e.g. recording failure, Admin reviews the affected class/course; may trigger a manual
+disconnect disputes) credit or reschedule
+Account Issue (e.g. teacher account dele>on Admin reviews Teacher/Student management (Sec>on 9.2,
+request, suspension appeal) 9.5)
+Admin reviews the Course table (Sec>on 15.2) and enrollment
+Course / Enrollment Issue
+record
+Routes into the exis>ng Refund Policy (Sec>on 11) or Escrow
+Dispute
+Dispute Management (Sec>on 9.4)
+CONFIDENTIAL — Internal product/engineering specification | Page 38 of 49
+=== PAGE 39 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+14. Edge Cases
+Open missed in a first build but cri>cal to handle. Each is mapped below to how it actually gets resolved — most
+either happen automa>cally, are self-service, are already covered by an exis>ng flow, or go through the Support
+Ticke>ng System (Sec>on 13).
+Edge Case ResoluAon Path
+System policy, confirmed: single ac>ve session per teacher/student
+Login from mul>ple devices account (new device logs out the old one); a linked parent's separate
+login is unaffected (Sec>on 8.2) — no >cket needed
+Self-service in Payout Setup (Sec>on 2.2, Step F); a Support Ticket
+Teacher changes bank account
+only if verifica>on then fails
+Student changes >mezone Self-service in Sevngs (Sec>on 6.2)
+Handled by aZendance auto-recording (Sec>on 7.2); student/teacher
+Internet disconnects during class
+can raise a Support Ticket to dispute the resul>ng aZendance record
+Recording failure Support Ticket — Technical / Recording Issue
+Exis>ng Refund Policy (Sec>on 11) — can be raised as a >cket for
+Par>al refund / full refund
+tracking, decision stays in that flow
+Duplicate payment Support Ticket — Payment Issue
+Failed payout Support Ticket — Payout Issue (aper any automa>c retry fails)
+System-triggered flag for Admin review — no >cket needed, admin-
+Teacher inac>ve for 90 days
+ini>ated
+Subscrip>on (recording pass) expires during System no>fica>on to the teacher (Sec>on 12); Support Ticket only if
+an ac>ve course the teacher disputes the >ming
+Student deletes account Self-service, with confirma>on step — not a >cket
+Support Ticket — Account Issue, since this needs admin review
+Teacher requests account dele>on
+before comple>on
+Admin-ini>ated (Sec>on 9.2); teacher can raise a Support Ticket to
+Admin suspends a teacher mid-course
+appeal
+Handled in Admin Review (Sec>on 2.3); teacher can raise a Support
+Teacher uploads an invalid cer>ficate
+Ticket to dispute a rejec>on
+Payment succeeds but course enrollment fails Support Ticket — Payment Issue (high priority by default)
+Escrow release blocked due to an open Exis>ng Escrow Dispute Management (Sec>on 9.4) — can be raised as
+dispute a >cket for tracking
+Auto-expiry of trial/demo classes System-automated — no >cket needed
+Self-service reschedule where available; Support Ticket if teacher and
+Missed-class rescheduling rules
+student can't agree
+CONFIDENTIAL — Internal product/engineering specification | Page 39 of 49
+=== PAGE 40 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+15. Database Field Reference
+15.1 Teacher Table
+Field
+Teacher ID
+PlaLorm (HidayahConnect / TeachUsConnect)
+Full Name
+Email
+Mobile
+Country
+Gender
+Profile Photo
+Bio
+Languages
+Experience
+Subjects
+Profile Fee Type (Hourly / Monthly / Per Course)
+Profile Fee Amount
+Iden>ty Status
+Qualifica>on Status
+Stripe Account ID
+Razorpay Contact ID
+Bank Verifica>on Status
+Teacher Status
+Badge Level
+Recording Pass Status (Ac>ve / Inac>ve)
+Recording Course Slots Used (0-3)
+Free Demo Classes Remaining (One-Time Quota of 3)
+Created Date
+15.2 Course Table
+CONFIDENTIAL — Internal product/engineering specification | Page 40 of 49
+=== PAGE 41 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field
+Course ID
+Teacher ID
+PlaLorm (inherited from Teacher)
+Course Name
+Category
+Dura>on
+Fee Type (Hourly / Monthly / Per Course)
+Total Amount
+Commission %
+Milestone Type (Comple>on-based / Monthly / Weekly)
+Demo Enabled (toggle)
+Recording Enabled (toggle)
+Course Status
+15.3 Student Table
+Field
+Student ID
+Name
+Email
+Mobile
+Country
+Date of Birth
+Linked Parent ID (nullable)
+Parent Consent Status
+Saved Payment Token
+Auto-Pay Enabled
+Enrollment Status
+Created Date
+15.4 Parent Table
+Field
+Parent ID
+Full Name
+Rela>onship to Student
+Mobile (login creden>al, OTP-verified)
+CONFIDENTIAL — Internal product/engineering specification | Page 41 of 49
+=== PAGE 42 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field
+Linked Student ID(s)
+Consent Status
+Consent Date
+Saved Payment Token
+Created Date
+15.5 Message Table
+Field
+Message ID
+Thread ID
+Sender Type (Student / Teacher / Parent)
+Sender ID
+Course ID (nullable)
+Message Body
+AZachment URL (nullable)
+Read Status
+Sent Timestamp
+15.6 Payment Table
+Field
+Payment ID
+Student ID
+Course ID
+Course Fee Amount
+Commission Amount
+GST Amount (18% of Commission Amount)
+Total Charged Amount
+Currency
+Gateway (Stripe / Razorpay)
+Charged To (Student / Parent)
+Payment Status
+15.7 Payout Table
+Field
+Payout ID
+CONFIDENTIAL — Internal product/engineering specification | Page 42 of 49
+=== PAGE 43 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+Field
+Teacher ID
+Course ID
+Milestone Number
+Payout Amount
+Commission Amount
+Payout Status (Pending / Released / Completed / Failed)
+15.8 Ticket Table
+Field
+Ticket ID
+Raised By Type (Student / Teacher)
+Raised By ID
+Category
+Related Record Type (Course / Payment / Payout / Other, nullable)
+Related Record ID (nullable)
+Subject
+Descrip>on
+AZachment URL (nullable)
+Priority (Low / Medium / High / Urgent)
+Status (Open / In Progress / Awai>ng User Response / Resolved / Closed)
+Assigned Admin ID (nullable)
+Internal Notes
+Resolu>on Notes
+Created Date
+Last Updated Date
+15.9 Admin Controls
+● Teacher Approval, Course Approval, Iden>ty Verifica>on Review, Qualifica>on Review
+● Payment Monitoring, Payout Monitoring
+● Dispute Management, Refund Management
+● Teacher Suspension, Student Suspension, Parent Consent Revoca>on Review
+● Support Ticket Management (Sec>on 13)
+CONFIDENTIAL — Internal product/engineering specification | Page 43 of 49
+=== PAGE 44 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+16. Worked Scenarios — End-to-End Examples
+Everything above documents the pieces — fields, flows, and rules — one sec>on at a >me. This sec>on walks a
+handful of realis>c situa>ons all the way through, pulling several sec>ons together, so the dev team can see
+exactly how they connect in prac>ce. Each one cites the sec>ons it draws from.
+Scenario 1: Student cancels a short course before it starts
+A student books a 10-day Tajweed Intensive on HidayahConnect for ₹2,000, paying in full. Two days before the
+course starts, they change their mind.
+Student pays ₹2,000 + GST on the ₹600 commission (30%) — total charged ₹2,108 (SecAon 5.2)
+↓ Money sits in escrow, Locked (Sec>on 5.1)
+↓ Student opens My Courses → Request Refund (Sec>on 11)
+↓ Because this is more than 24 hours before the course start, the cancella>on cutoff is met (Refund Policy, Sec>on 4)
+↓ Refund approved — full ₹2,108 returned to the student's original payment method
+↓ Course removed from the teacher's upcoming schedule; the freed slot becomes available again
+Result: Full refund. Teacher earns nothing from this booking — they never delivered anything, so there's no
+payout to protect.
+Scenario 2: Teacher doesn't show up for a scheduled class
+A HidayahConnect student has paid ₹1,000 for a one->me Quran webinar. At the scheduled >me, the teacher
+never joins.
+Session start Ame passes with Teacher Join Time never recorded (SecAon 5.3 akendance rule)
+↓ System flags the class as a no-show once the scheduled window closes
+↓ Automa>c full refund triggered — ₹1,000 + GST returned to the student, no refund request needed (Refund Policy,
+Sec>on 4)
+↓ Teacher's wallet is not credited — no delivery occurred
+CONFIDENTIAL — Internal product/engineering specification | Page 44 of 49
+=== PAGE 45 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+↓ A penalty / wallet adjustment is applied to the teacher's account per the plaLorm's no-show policy (Sec>on 10
+condi>onal flow: “Teacher absent for a scheduled class”)
+↓ Both student and teacher receive a no>fica>on explaining what happened (Sec>on 12)
+Result: Full automa>c refund to the student. No dev-side ambiguity here — this should never require a manually-
+raised Support >cket, since the system already knows the teacher never joined.
+Scenario 3: Long-term course, student cancels partway through
+A student is 3 months into an 8-month Hifz Program on HidayahConnect, paying ₹1,000/month (₹8,000 total
+course fee). They decide to stop aper month 3.
+Months 1-3 already completed: each month's ₹700 (70%) was released to the teacher aWer that month finished
+(SecAon 5.5) — those payouts are final and not reversible (SecAon 5.8)
+↓ Month 4 payment, already collected from the student, is s>ll sivng in escrow, Locked — that month hasn't been
+taught yet
+↓ Student requests to stop the course via My Courses → Request Refund
+↓ Admin reviews (Sec>on 9.4) — since months 1-3 were genuinely delivered, only the un-delivered por>on is in
+ques>on
+↓ Month 4's escrowed amount is refunded to the student; months 5-8 were never charged, so there's nothing to refund
+there
+Result: Par>al refund — exactly one month's worth. Months already taught and paid out stay paid out; only the
+untaught, s>ll-escrowed month comes back.
+Scenario 4: Student uses a free demo, then upgrades to the full course
+A student books a free 30-minute demo with a TeachUsConnect Mathema>cs teacher — the last of that teacher's
+one->me alloca>on of 3 free demos. They like the class and want to enroll properly.
+Demo booked using the last of the teacher's one-Ame free-demo quota (SecAon 4.1) — no charge to the student
+↓ Demo class delivered
+↓ Teacher sends a demo-to-full-course enrollment offer from the student's record (Sec>on 7.5)
+CONFIDENTIAL — Internal product/engineering specification | Page 45 of 49
+=== PAGE 46 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+↓ Since this is a purchase, it routes through the same rule as any other purchase (Sec>on 8.3) — IF the student is under
+18, a parent-approval request is sent before payment proceeds
+↓ Student (or approving parent) completes payment for the full course at TeachUsConnect's rate: 28% commission, GST
+calculated on that commission only (Sec>on 5.2)
+↓ Course appears in the student's My Courses; escrow flow begins as normal (Sec>on 5.1)
+Result: No cash changed hands for the demo itself. The paid enrollment that follows is a completely ordinary
+purchase — the only thing special about it is where the student came from.
+Scenario 5: Teacher tries to enable recording on a 4th course
+A HidayahConnect teacher already has the ₹199/month Recording Pass ac>ve on 3 courses (the maximum). They
+try to enable recording on a 4th course.
+Teacher opens Course CreaAon, Step 7c (SecAon 3) for the 4th course
+↓ System checks Recording Course Slots Used against the cap of 3 (Sec>on 4.4, Teacher Table Sec>on 15.1)
+↓ Slots already full → toggle is blocked
+↓ Message shown: “Recording slots full — remove recording from another course or wait un>l next billing cycle”
+(Sec>on 3, Step 7c)
+Result: The 4th course can s>ll be created and published — it simply can't have recording enabled un>l the
+teacher frees up a slot on one of the other 3.
+Scenario 6: Payment succeeds but the student never gets enrolled
+A student pays for a HidayahConnect course. The payment gateway confirms success, but a technical error means
+the course never actually appears in their My Courses.
+Student noAces the course missing, opens Help / Support (SecAon 13.1)
+↓ Raises a >cket: Category = Payment Issue, Related Record = the Payment ID from their payment confirma>on
+↓ Ticket lands in the admin queue at High priority by default for this category (Sec>on 13.1)
+↓ Admin opens the >cket, checks the Payment table (Sec>on 15.6) and Course/Enrollment record (Sec>on 15.2)
+CONFIDENTIAL — Internal product/engineering specification | Page 46 of 49
+=== PAGE 47 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+↓ Admin manually completes the enrollment (or triggers a refund if the course is no longer available) and adds
+resolu>on notes
+↓ Student is no>fied the >cket is Resolved
+Result: This is exactly the kind of gap the Support Ticke>ng System (Sec>on 13) exists to catch — a technical failure
+that the automated flows alone wouldn't resolve.
+Scenario 7: Under-18 student wants to enroll in a paid course
+A 15-year-old student, registered with parent consent already on file, tries to purchase a ₹3,000 HidayahConnect
+course.
+Student selects the course and proceeds to SecAon 6.4's purchase flow
+↓ System checks Parent Consent Status (Sec>on 6.1) — confirmed Yes, parent linked
+↓ Because every purchase requires parent approval, not just registra>on (Sec>on 8.3), the purchase pauses here
+↓ Parent receives an SMS/no>fica>on: “Request sent to parent”, with a link to approve or decline
+↓ Parent logs in with their own registered mobile number (Sec>on 8.2 — no separate portal, same screens as the
+student side) and approves
+↓ Payment is charged to the parent's saved payment method, not the student's (Sec>on 8.3)
+↓ Course appears in the student's My Courses; parent can see it too via their linked access
+Result: The student picked the course, but the parent's approval and payment method are what actually
+completed the purchase — the student alone can't finish a purchase without that step.
+Scenario 8: Refund dispute — student and teacher disagree
+A student requests a refund on a HidayahConnect course, claiming the teacher didn't cover what was promised.
+The teacher disagrees and says the course was delivered as described.
+Student raises the refund via My Courses → Request Refund, staAng the reason (SecAon 11.5)
+↓ Admin requests the teacher's response before deciding — teacher explains their side
+CONFIDENTIAL — Internal product/engineering specification | Page 47 of 49
+=== PAGE 48 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+↓ Admin reviews both accounts, plus aZendance and course records, and makes a decision within the refund decision
+>meline (Sec>on 11.5)
+↓ IF the student disagrees with the outcome: they escalate through the same Support >cket rather than opening a new
+one (Sec>on 11.11) — the team takes a second look
+↓ Final decision stands once the escala>on review is complete
+Result: This is the one refund scenario where the outcome genuinely depends on human judgment, not
+automa>on — the system's job is to get both sides in front of admin with the right evidence, not to decide who's
+right.
+Scenario 9: Student requests a refund aWer the window has closed
+A HidayahConnect student completed a short course 10 days ago. They now want a refund, but the refund
+window (proposed at 7 days — Sec>on 11.6) has already passed.
+Student opens My Courses → Request Refund
+↓ System checks the comple>on date against the refund window (Sec>on 11.6)
+↓ Window has expired — the course's escrow funds already auto-released to the teacher once the window closed
+↓ Refund request is declined automa>cally, with the reason shown to the student (window expired)
+↓ Student can s>ll raise a Support >cket if they believe there were extenua>ng circumstances (Sec>on 13.1) — but this
+is now a manual excep>on review, not a standard refund
+Result: No refund through the standard flow — the money already moved to the teacher's wallet once the
+window closed. This is exactly why the refund window (Sec>on 11.6) needs to be enforced by the app itself, not
+just stated in the policy.
+Scenario 10: Student is charged twice for the same booking
+A payment gateway hiccup causes a HidayahConnect student to be charged ₹2,108 twice for the same course.
+Payment system detects two successful charges for the same student, course, and amount within a short window
+↓ Flagged automa>cally as a likely duplicate payment (Sec>on 11.4)
+↓ Duplicate charge is refunded automa>cally — no refund request needed from the student
+CONFIDENTIAL — Internal product/engineering specification | Page 48 of 49
+=== PAGE 49 ===
+Hidayah Technologies Private Limited Complete Product Journey & Field Specifica>on — August 2026
+↓ The original (first) payment proceeds through the normal escrow flow (Sec>on 5.1) as if nothing happened
+↓ Student receives a no>fica>on explaining the duplicate was detected and refunded
+Result: Full, automa>c refund of just the duplicate charge. This should never need a Support >cket or admin
+review — it's detectable and fixable by the system alone.
+CONFIDENTIAL — Internal product/engineering specification | Page 49 of 49

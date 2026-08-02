@@ -59,6 +59,8 @@ async function main() {
             status: "not_run",
             priority: tc.priority ?? "medium",
             category: tc.category ?? "functional",
+            decisionNeeded: tc.decisionNeeded ?? false,
+            specReference: tc.specReference ?? null,
           },
         });
       }

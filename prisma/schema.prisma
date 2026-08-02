@@ -46,20 +46,22 @@ model Tester {
 }
 
 model TestCase {
-  id            String          @id @default(cuid())
-  suiteId       String
-  suite         TestSuite       @relation(fields: [suiteId], references: [id], onDelete: Cascade)
-  title         String
-  description   String?
-  steps         String?
-  expected      String?
-  status        String          @default("not_run") // not_run | pass | fail | blocked | skipped
-  priority      String          @default("medium") // low | medium | high | critical
-  category      String          @default("functional") // functional | ui | integration | security | payment
-  testerName    String?
-  notes         String?
-  lastRunAt     DateTime?
-  createdAt     DateTime        @default(now())
+  id             String          @id @default(cuid())
+  suiteId        String
+  suite          TestSuite       @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  steps          String?
+  expected       String?
+  status         String          @default("not_run") // not_run | pass | fail | blocked | skipped
+  priority       String          @default("medium") // low | medium | high | critical
+  category       String          @default("functional") // functional | ui | integration | security | payment
+  testerName     String?
+  notes          String?
+  lastRunAt      DateTime?
+  decisionNeeded Boolean         @default(false) // marks items pending product/biz decision
+  specReference  String?         // e.g. "Sec 11.4" pointing back to the spec PDF
+  createdAt      DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   executions    TestExecution[]
   bugs          Bug[]

@@ -40,6 +40,9 @@ import {
   FileBarChart,
   Crown,
   Mail,
+  GitBranch,
+  Route,
+  Bell,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -105,7 +108,7 @@ const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard }[]
 ];
 
 const MODULE_ICONS: Record<string, typeof Globe> = {
-  Globe, UserPlus, LayoutDashboard, GraduationCap, BookOpen, Shield, LifeBuoy,
+  Globe, UserPlus, LayoutDashboard, GraduationCap, BookOpen, Shield, LifeBuoy, Users, GitBranch, Route, Bell,
 };
 
 const STATUS_COLORS_PIE: Record<TestStatus, string> = {
@@ -650,13 +653,13 @@ function DashboardView({ stats, onNavigate }: { stats: any; onNavigate: (v: View
   return (
     <div className="space-y-5">
       {/* Hero KPI cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard
           title="Total Test Cases"
           value={s.totalTestCases}
           icon={ListChecks}
           accent="slate"
-          subtitle="Across 7 modules"
+          subtitle={`Across ${stats.moduleStats?.length ?? 12} modules`}
         />
         <KpiCard
           title="Passed"
@@ -686,7 +689,36 @@ function DashboardView({ stats, onNavigate }: { stats: any; onNavigate: (v: View
           accent="teal"
           subtitle={`${s.totalTestCases - s.notRunCount} of ${s.totalTestCases} executed`}
         />
+        <KpiCard
+          title="Decisions Needed"
+          value={s.decisionsNeeded ?? 0}
+          icon={AlertTriangle}
+          accent="amber"
+          subtitle="Pending founder confirm"
+        />
       </div>
+
+      {/* Decisions Needed banner (only shown if there are pending decisions) */}
+      {s.decisionsNeeded > 0 && (
+        <Card className="border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50">
+          <CardContent className="p-4 flex items-start gap-3">
+            <div className="size-9 rounded-lg bg-amber-500 flex items-center justify-center text-white shrink-0">
+              <AlertTriangle className="size-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-bold text-amber-900">
+                {s.decisionsNeeded} Product Decision{s.decisionsNeeded === 1 ? "" : "s"} Pending Founder Confirmation
+              </h3>
+              <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                Per Sec 11.12 of the spec, five refund-policy numbers were never defined anywhere else and need founder confirmation before public launch: (1) Student cancellation cutoff — proposed 24h, (2) Refund decision timeline — proposed 5 business days, (3) Refund request window — proposed 7 days, (4) Demo class refund treatment — proposed no cash refund, (5) Recording Pass refund — proposed non-refundable once billing month started.
+              </p>
+              <p className="text-[11px] text-amber-700 mt-2">
+                Go to <strong>Test Cases</strong> → click the amber <strong>Decisions Needed</strong> toggle to filter these items.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -972,6 +1004,11 @@ function TestCasesView({
                   { value: "student_dashboard", label: "Student Dashboard" },
                   { value: "admin_dashboard", label: "Admin Dashboard" },
                   { value: "support_ticketing", label: "Support & Ticketing" },
+                  { value: "refund_escrow", label: "Refund & Escrow" },
+                  { value: "parent_journey", label: "Parent Journey" },
+                  { value: "conditional_edge_cases", label: "Conditional & Edge" },
+                  { value: "worked_scenarios", label: "Worked Scenarios (E2E)" },
+                  { value: "notifications_matrix", label: "Notifications" },
                 ]}
               />
               <FilterSelect
@@ -1024,6 +1061,28 @@ function TestCasesView({
                 ]}
               />
             </div>
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+              <Button
+                size="sm"
+                variant={filters.decisionNeeded === "true" ? "default" : "outline"}
+                onClick={() => setFilters((f) => ({
+                  ...f,
+                  decisionNeeded: f.decisionNeeded === "true" ? undefined : "true",
+                }))}
+                className={filters.decisionNeeded === "true" ? "bg-amber-500 hover:bg-amber-600 text-white" : "border-amber-300 text-amber-700 hover:bg-amber-50"}
+              >
+                <AlertTriangle className="size-3.5 mr-1.5" />
+                Decisions Needed
+                {filters.decisionNeeded === "true" && (
+                  <X className="size-3 ml-1.5" />
+                )}
+              </Button>
+              <span className="text-[11px] text-slate-500">
+                {filters.decisionNeeded === "true"
+                  ? "Showing only items pending founder/product decision (per Sec 11.12)"
+                  : "5 refund-policy items need founder confirmation before launch — click to filter"}
+              </span>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -1068,10 +1127,23 @@ function TestCasesView({
                       className="cursor-pointer hover:bg-slate-50"
                     >
                       <TableCell>
-                        <div className="font-medium text-slate-900 text-sm line-clamp-1">{tc.title}</div>
-                        {tc.description && (
-                          <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{tc.description}</div>
-                        )}
+                        <div className="flex items-start gap-1.5">
+                          {tc.decisionNeeded && (
+                            <span className="inline-flex items-center gap-0.5 shrink-0 mt-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-300" title={`Pending founder decision — ${tc.specReference ?? "see spec"}`}>
+                              <AlertTriangle className="size-2.5" />
+                              Decision
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-900 text-sm line-clamp-1">{tc.title}</div>
+                            {tc.description && (
+                              <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{tc.description}</div>
+                            )}
+                            {tc.specReference && (
+                              <div className="text-[10px] text-slate-400 mt-0.5 font-mono">{tc.specReference}</div>
+                            )}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="text-xs text-slate-700 font-medium">{tc.suite.module.name}</div>
@@ -1243,13 +1315,29 @@ function TestCaseDetailDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <Badge variant="outline" className="text-[10px]">{tc.suite.module.name}</Badge>
             <Badge variant="outline" className="text-[10px]">{tc.suite.name}</Badge>
             <CategoryBadge category={tc.category} />
             <PriorityBadge priority={tc.priority} />
+            {tc.decisionNeeded && (
+              <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 border border-amber-300">
+                <AlertTriangle className="size-3" />
+                Decision Needed
+              </span>
+            )}
+            {tc.specReference && (
+              <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-mono bg-slate-100 text-slate-600 border border-slate-200">
+                {tc.specReference}
+              </span>
+            )}
           </div>
           <DialogTitle className="text-base">{tc.title}</DialogTitle>
+          {tc.decisionNeeded && (
+            <p className="text-xs text-amber-700 mt-1 bg-amber-50 border border-amber-200 rounded p-2">
+              <strong>Pending founder/product decision.</strong> This test case covers a refund-policy number that was never defined elsewhere in the spec. The proposed default is in the expected result below — confirm or replace before launch.
+            </p>
+          )}
         </DialogHeader>
 
         <div className="space-y-4 py-2">

@@ -12,6 +12,7 @@ export async function GET() {
     totalBugs,
     openBugs,
     criticalBugs,
+    decisionsNeededCount,
     modules,
   ] = await Promise.all([
     db.testCase.count(),
@@ -23,12 +24,13 @@ export async function GET() {
     db.bug.count(),
     db.bug.count({ where: { status: "open" } }),
     db.bug.count({ where: { severity: "critical" } }),
+    db.testCase.count({ where: { decisionNeeded: true } }),
     db.module.findMany({
       orderBy: { order: "asc" },
       include: {
         suites: {
           include: {
-            testCases: { select: { status: true, priority: true, category: true } },
+            testCases: { select: { status: true, priority: true, category: true, decisionNeeded: true } },
           },
         },
       },
@@ -146,6 +148,7 @@ export async function GET() {
       overallCoverage,
       totalTesters: testers.length,
       activeTesters: testers.filter((t) => t.active).length,
+      decisionsNeeded: decisionsNeededCount,
     },
     moduleStats,
     categoryStats,

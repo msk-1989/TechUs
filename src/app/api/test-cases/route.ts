@@ -7,6 +7,7 @@ export async function GET(req: NextRequest) {
   const priority = req.nextUrl.searchParams.get("priority");
   const category = req.nextUrl.searchParams.get("category");
   const testerId = req.nextUrl.searchParams.get("testerId");
+  const decisionNeeded = req.nextUrl.searchParams.get("decisionNeeded");
   const search = req.nextUrl.searchParams.get("search");
 
   const where: Record<string, unknown> = {};
@@ -15,6 +16,9 @@ export async function GET(req: NextRequest) {
   if (category && category !== "all") where.category = category;
   if (moduleId && moduleId !== "all") {
     where.suite = { moduleId };
+  }
+  if (decisionNeeded === "true") {
+    where.decisionNeeded = true;
   }
   if (testerId && testerId !== "all") {
     if (testerId === "any") {

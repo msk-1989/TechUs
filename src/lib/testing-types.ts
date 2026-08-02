@@ -34,6 +34,8 @@ export interface TestCase {
   testerName: string | null;
   notes: string | null;
   lastRunAt: string | null;
+  decisionNeeded: boolean;
+  specReference: string | null;
   suite: {
     id: string;
     name: string;

@@ -102,3 +102,63 @@ Stage Summary:
 - Screenshots saved:
   - /home/z/my-project/download/qa-testers-dashboard.png (dashboard showing Testers count = 5)
   - /home/z/my-project/download/qa-testers-view.png (Testers view with roster + drill-down)
+
+---
+Task ID: 3
+Agent: Main agent (Super Z)
+Task: Update testing reporting system based on complete 49-page product spec PDF (Hidayah Connect & TeachUs - Complete Product Journey & Field Specification v1.0 — August 2026)
+
+Work Log:
+- Extracted full text of 49-page PDF spec using pdf.py extract.text (79,957 chars)
+- Read entire spec covering: Platform Overview, Teacher Journey, 12-step Course Creation, Demo Class System, Escrow & Payout, Student Journey, Parent Journey, Admin Journey, Conditional/IF-ELSE Flows, Refund Policy (with 5 DECISION NEEDED items), Notifications Matrix, Support & Ticketing, Edge Cases, Database Field Reference, 10 Worked Scenarios
+- Added `decisionNeeded` Boolean field + `specReference` String field to TestCase Prisma model
+- Pushed schema + regenerated Prisma client
+- Updated seed-data.ts:
+  • Corrected platform-specific pricing (HidayahConnect ₹399 India / TeachUsConnect ₹499 India / $9.99 international both) — was incorrectly showing $9.99 for both platforms
+  • Added new suite "Teacher Status & Badge Levels (Sec 1.4)" with 10 tests covering Status (Pending Verification → Verified → Active → Suspended → Blocked) and 4 Badge Levels (Level 1 Verified, Level 2 Certified, Level 3 Top Educator 25+ classes + 4.5 rating, Level 4 Featured admin-selected)
+  • Added Stripe Tax (not fixed 18% international) handling
+  • Added payment failure recovery (Retry / Different Method / Cancel)
+  • Marked registration fee non-refundable per Sec 11.2
+- Added 5 new modules:
+  1. **Refund Policy & Escrow** (58 tests, 8 suites) — Escrow Flow, GST Treatment, Attendance 70% rule, Payout Models (short vs long), Teacher Wallet (6 balance types), Student Protection, Refund Standard Rules, Refund DECISIONS NEEDED (5 items marked decisionNeeded=true)
+  2. **Parent/Guardian Journey** (33 tests, 6 suites) — Parent Consent, Shared Login (no separate portal), What Requires Approval (every purchase, every time), Parent Communication, Parent Notifications, Revoking Consent
+  3. **Conditional & Edge Cases** (28 tests, 2 suites) — 9 IF-ELSE flows + 18 edge cases with resolution paths
+  4. **Worked Scenarios (E2E)** (10 tests, 1 suite) — All 10 end-to-end scenarios from Sec 16 with full expected outcomes
+  5. **Notifications Matrix** (18 tests, 3 suites) — Multi-channel (Email/SMS/WhatsApp/Push/Admin) for every event, Support Ticket notifications, Channel Preferences & Toggles
+- Re-ran seed: 506 test cases across 12 modules, 5 DECISION NEEDED items flagged
+- Updated /api/test-cases GET to support decisionNeeded filter
+- Updated /api/stats to count decisionsNeeded and include in summary
+- Updated UI:
+  • Added GitBranch, Route, Bell icons to MODULE_ICONS map for new modules
+  • Added 6th KPI card "Decisions Needed" (amber accent) on dashboard
+  • Added amber "Decisions Pending Founder Confirmation" banner on dashboard when decisionsNeeded > 0, listing all 5 items
+  • Added DECISION NEEDED amber badge to test case rows in table
+  • Added specReference display (mono font, slate color) under each test case title
+  • Added "Decisions Needed" toggle button in Test Cases filter bar (amber when active)
+  • Added 5 new modules to Module filter dropdown
+  • Updated test case detail dialog to show DECISION NEEDED badge + spec reference chip + warning banner explaining the item needs founder confirmation
+- Browser-verified end-to-end:
+  • Dashboard shows "5 Product Decisions Pending Founder Confirmation" banner
+  • All 12 modules visible in sidebar and module cards
+  • Test Cases view shows 506 cases
+  • Clicking "Decisions Needed" toggle filters to exactly the 5 decision-needed items
+  • Each decision-needed row shows amber "DECISION" badge + spec reference (e.g. "Sec 11.4 / 11.12 #1")
+  • Clicking a decision-needed test case opens dialog with "Decision Needed" badge, spec reference chip, and amber warning banner
+  • Module Reports view shows all 12 modules with coverage stats
+  • Zero browser errors
+- Lint passes with zero issues
+
+Stage Summary:
+- Test case count grew from 345 → 506 (47% increase) reflecting full spec coverage
+- Module count grew from 7 → 12 (added Refund & Escrow, Parent Journey, Conditional & Edge, Worked Scenarios E2E, Notifications Matrix)
+- 5 DECISION NEEDED items flagged for founder confirmation before public launch (per Sec 11.12 of spec):
+  1. Student cancellation cutoff — proposed 24h (Sec 11.4)
+  2. Refund decision timeline — proposed 5 business days (Sec 11.5)
+  3. Refund request window — proposed 7 days (Sec 11.6)
+  4. Demo class refund treatment — proposed no cash refund (Sec 11.7)
+  5. Recording Pass refund — proposed non-refundable once billing month started (Sec 11.8)
+- Every test case tagged with specReference (e.g. "Sec 5.2", "Sec 11.4 / 11.12 #1") for traceability back to the PDF
+- Screenshots saved:
+  - /home/z/my-project/download/qa-updated-dashboard.png (dashboard with Decisions banner + 12 modules)
+  - /home/z/my-project/download/qa-decision-needed-dialog.png (decision-needed test case detail)
+  - /home/z/my-project/download/qa-module-reports-12.png (12-module reports view)
