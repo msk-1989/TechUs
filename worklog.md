@@ -264,3 +264,73 @@ Stage Summary:
 - The ONLY remaining issue: user needs to add 3 env vars in Vercel dashboard
 - Once env vars are set + app is redeployed, everything will work
 - Debug endpoint: https://tech-us-seven.vercel.app/api/debug
+
+---
+Task ID: 7
+Agent: Main agent (Super Z)
+Task: Add RBAC (admin vs tester roles) + missing QA features
+
+Work Log:
+- Created src/lib/permissions.ts with requireAdmin(), requireAuth(), isAdmin() helpers
+- Updated /api/test-cases/route.ts:
+  • PATCH now requires auth (any role) for execution updates
+  • PATCH with assignedTesterId requires admin/lead
+  • NEW POST endpoint - create test case (admin only)
+- Created /api/test-cases/[id]/route.ts:
+  • GET - single test case with full details
+  • PUT - update test case (admin only)
+  • DELETE - delete test case with cascade (admin only)
+  • POST - clone test case (admin only)
+- Updated /api/audit/route.ts to require admin (was public before)
+- Created /api/activity/route.ts - public activity feed (any auth user, sanitized)
+- Created /api/requirements-coverage/route.ts - groups test cases by specReference
+- Updated src/lib/testing-types.ts to add assignedTester field to TestCase
+
+UI Changes (src/app/page.tsx):
+- Added 4 new components:
+  1. TestCaseCrudDialog - create/edit/clone/delete test cases (admin only)
+  2. AuditLogView - audit log viewer with action filter (admin only)
+  3. RequirementsView - test coverage grouped by spec section
+  4. ActivityFeed - dashboard widget showing last 20 team actions
+
+- Updated Sidebar:
+  • Added "Audit Log" nav item (adminOnly: true, hidden from testers)
+  • Added "Requirements" nav item (visible to all)
+  • Filters nav items by role
+
+- Updated TestCasesView:
+  • Added "New Test Case" button (admin only)
+  • Passes userRole + onCrudTestCase callback
+
+- Updated TestCaseDetailDialog:
+  • Added Edit, Clone, Delete buttons in header (admin only)
+  • Edit opens TestCaseCrudDialog with prefilled values
+  • Clone opens confirmation dialog
+  • Delete opens confirmation with cascade warning
+
+- Updated DashboardView:
+  • Added ActivityFeed component at bottom showing recent 20 actions
+
+Verification (tested on Vercel):
+- ✅ Admin can login and see all 8 nav items including "Audit Log"
+- ✅ Tester can login and sees 7 nav items (no "Audit Log")
+- ✅ Tester gets 403 on /api/audit endpoint
+- ✅ Tester gets 403 on /api/test-cases POST (create)
+- ✅ Admin can create test case via /api/test-cases POST (HTTP 201)
+- ✅ Admin can delete test case via /api/test-cases/[id] DELETE (HTTP 200)
+- ✅ Admin can view audit log with 3 entries (seed, create, delete)
+- ✅ Tester can view /api/activity (public activity feed)
+- ✅ Requirements coverage shows 99 spec sections, 168 tests with spec, 338 untraceable
+- ✅ Build: 19 routes (was 15)
+- ✅ Lint: clean
+- ✅ TypeScript: strict mode passes
+
+Stage Summary:
+- Admin and tester now have properly different access (was identical before)
+- New QA features added:
+  1. Test Case CRUD (create/edit/delete/clone) - admin only
+  2. Audit Log viewer - admin only
+  3. Requirements Coverage view - all users
+  4. Activity Feed on dashboard - all users
+  5. Test Case Assignment - admin assigns via CRUD dialog
+  6. Test Case Cloning - admin can duplicate any test case
