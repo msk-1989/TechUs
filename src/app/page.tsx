@@ -43,6 +43,11 @@ import {
   GitBranch,
   Route,
   Bell,
+  ScrollText,
+  FileCheck,
+  Pencil,
+  Trash2,
+  Copy,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -98,13 +103,15 @@ const TESTER_ROLE_META: Record<string, { label: string; icon: typeof Crown }> = 
   tester: { label: "Tester",       icon: User },
 };
 
-type ViewKey = "dashboard" | "test_cases" | "bugs" | "testers" | "modules" | "reports";
+type ViewKey = "dashboard" | "test_cases" | "bugs" | "testers" | "audit" | "requirements" | "modules" | "reports";
 
-const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard }[] = [
+const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean }[] = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "test_cases", label: "Test Cases", icon: ListChecks },
   { key: "bugs",       label: "Bug Tracker", icon: BugIcon },
   { key: "testers",    label: "Testers",     icon: Users },
+  { key: "audit",      label: "Audit Log",   icon: ScrollText, adminOnly: true },
+  { key: "requirements", label: "Requirements", icon: FileCheck },
   { key: "modules",    label: "Module Reports", icon: BarChart3 },
   { key: "reports",    label: "Reports",     icon: FileBarChart },
 ];
@@ -137,6 +144,7 @@ function AppContent() {
   const [bugs, setBugs] = useState<Bug[]>([]);
   const [testers, setTesters] = useState<TesterStat[]>([]);
   const [loading, setLoading] = useState(false);
+  const [crudState, setCrudState] = useState<{ action: "create" | "edit" | "clone" | "delete" | null; testCase: TestCase | null }>({ action: null, testCase: null });
   const { toast } = useToast();
   const currentTester = useTesterStore((s) => s.currentTester);
   const setCurrentTester = useTesterStore((s) => s.setCurrentTester);
@@ -241,7 +249,7 @@ function AppContent() {
         }}
       />
       <div className="flex flex-1 flex-col md:flex-row">
-        <Sidebar view={view} onViewChange={setView} stats={stats} />
+        <Sidebar view={view} onViewChange={setView} stats={stats} userRole={(session?.user as any)?.role} />
         <main className="flex-1 p-4 md:p-6 overflow-x-hidden">
           <AnimatePresence mode="wait">
             <motion.div
@@ -260,6 +268,10 @@ function AppContent() {
                   testers={testers}
                   currentTester={currentTester}
                   loading={loading}
+                  userRole={(session?.user as any)?.role}
+                  onCrudTestCase={(action, tc) => {
+                    setCrudState({ action, testCase: tc ?? null });
+                  }}
                   onRefresh={refreshTestCases}
                   onUpdateStatus={async (id, status, notes, testerName) => {
                     try {
@@ -368,6 +380,8 @@ function AppContent() {
                 />
               )}
               {view === "modules" && <ModulesView stats={stats} onNavigate={setView} />}
+              {view === "audit" && <AuditLogView userRole={(session?.user as any)?.role} />}
+              {view === "requirements" && <RequirementsView />}
               {view === "reports" && <ReportsView stats={stats} testCases={testCases} bugs={bugs} />}
             </motion.div>
           </AnimatePresence>
@@ -375,6 +389,19 @@ function AppContent() {
       </div>
       <Footer />
       <Toaster />
+      {crudState.action && (
+        <TestCaseCrudDialog
+          action={crudState.action}
+          testCase={crudState.testCase}
+          testers={testers}
+          onClose={() => setCrudState({ action: null, testCase: null })}
+          onSuccess={() => {
+            refreshTestCases();
+            refreshStats();
+            setCrudState({ action: null, testCase: null });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -719,13 +746,14 @@ function UserMenu() {
 
 /* ---------------- Sidebar ---------------- */
 function Sidebar({
-  view, onViewChange, stats,
-}: { view: ViewKey; onViewChange: (v: ViewKey) => void; stats: any }) {
+  view, onViewChange, stats, userRole,
+}: { view: ViewKey; onViewChange: (v: ViewKey) => void; stats: any; userRole?: string }) {
   const counts = stats?.summary;
+  const isAdmin = userRole === "admin" || userRole === "lead";
   return (
     <aside className="md:w-60 lg:w-64 border-b md:border-b-0 md:border-r bg-white shrink-0">
       <nav className="flex md:flex-col gap-1 p-3 overflow-x-auto md:overflow-y-auto md:h-[calc(100vh-4rem)] md:sticky md:top-16">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
           const Icon = item.icon;
           const isActive = view === item.key;
           const count =
@@ -1037,7 +1065,110 @@ function DashboardView({ stats, onNavigate }: { stats: any; onNavigate: (v: View
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Team Activity */}
+      <ActivityFeed />
     </div>
+  );
+}
+
+/* ---------------- Activity Feed (Dashboard Widget) ---------------- */
+function ActivityFeed() {
+  const [activity, setActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/activity");
+        const data = await res.json();
+        if (!mounted) return;
+        setActivity(data.activity || []);
+      } catch {}
+      if (mounted) setLoading(false);
+    };
+    load();
+  }, []);
+
+  const actionIcon = (action: string): typeof ListChecks => {
+    if (action.startsWith("test_case")) return ListChecks;
+    if (action.startsWith("bug")) return BugIcon;
+    if (action.startsWith("auth")) return User;
+    if (action.startsWith("tester")) return Users;
+    if (action.startsWith("test_run")) return Route;
+    return Activity;
+  };
+
+  const actionColor = (action: string): string => {
+    if (action.includes("create") || action.includes("execute")) return "text-emerald-600 bg-emerald-50";
+    if (action.includes("update") || action.includes("assign")) return "text-sky-600 bg-sky-50";
+    if (action.includes("delete")) return "text-rose-600 bg-rose-50";
+    if (action.includes("clone")) return "text-violet-600 bg-violet-50";
+    if (action.startsWith("auth")) return "text-amber-600 bg-amber-50";
+    return "text-slate-600 bg-slate-50";
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Activity className="size-4 text-slate-500" />
+              Recent Team Activity
+            </CardTitle>
+            <CardDescription className="text-xs">Last 20 actions across the QA team</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 animate-pulse">
+                <div className="size-8 rounded-full bg-slate-200" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-3 bg-slate-200 rounded w-3/4" />
+                  <div className="h-2 bg-slate-200 rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : activity.length === 0 ? (
+          <div className="text-center text-sm text-slate-400 py-8">
+            <Activity className="size-6 mx-auto mb-2 text-slate-300" />
+            No recent activity. Start testing to see actions here.
+          </div>
+        ) : (
+          <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+            {activity.map((a) => {
+              const Icon = actionIcon(a.action);
+              const color = actionColor(a.action);
+              return (
+                <div key={a.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50">
+                  <div className={`size-7 rounded-full flex items-center justify-center shrink-0 ${color}`}>
+                    <Icon className="size-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-slate-900">
+                      <span className="font-medium">{a.userName}</span>
+                      <span className="text-slate-500"> · {a.action.replace(/_/g, " ")}</span>
+                    </div>
+                    {a.details && (
+                      <div className="text-[11px] text-slate-600 mt-0.5 line-clamp-2">{a.details}</div>
+                    )}
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {new Date(a.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1095,7 +1226,7 @@ function LoadingSkeleton() {
 
 /* ---------------- Test Cases View ---------------- */
 function TestCasesView({
-  testCases, testers, currentTester, loading, onRefresh, onUpdateStatus, onReportBug,
+  testCases, testers, currentTester, loading, onRefresh, onUpdateStatus, onReportBug, userRole, onCrudTestCase,
 }: {
   testCases: TestCase[];
   testers: TesterStat[];
@@ -1104,7 +1235,10 @@ function TestCasesView({
   onRefresh: (filters?: Record<string, string>) => void;
   onUpdateStatus: (id: string, status: TestStatus, notes: string, testerName: string) => void;
   onReportBug: (bug: any) => void;
+  userRole?: string;
+  onCrudTestCase?: (action: "create" | "edit" | "clone" | "delete", tc?: TestCase) => void;
 }) {
+  const isAdmin = userRole === "admin" || userRole === "lead";
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(true);
@@ -1150,6 +1284,16 @@ function TestCasesView({
             Filters
             <ChevronDown className={`size-3.5 ml-1 transition-transform ${showFilters ? "rotate-180" : ""}`} />
           </Button>
+          {isAdmin && onCrudTestCase && (
+            <Button
+              size="sm"
+              onClick={() => onCrudTestCase("create")}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              <Plus className="size-3.5 mr-1" />
+              New Test Case
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1375,6 +1519,8 @@ function TestCasesView({
           onClose={() => setSelectedTc(null)}
           onUpdateStatus={onUpdateStatus}
           onReportBug={onReportBug}
+          userRole={userRole}
+          onCrudTestCase={onCrudTestCase}
         />
       )}
     </div>
@@ -1438,14 +1584,17 @@ function CategoryBadge({ category }: { category: Category }) {
 
 /* ---------------- Test Case Detail Dialog ---------------- */
 function TestCaseDetailDialog({
-  tc, currentTester, onClose, onUpdateStatus, onReportBug,
+  tc, currentTester, onClose, onUpdateStatus, onReportBug, userRole, onCrudTestCase,
 }: {
   tc: TestCase;
   currentTester: CurrentTester | null;
   onClose: () => void;
   onUpdateStatus: (id: string, status: TestStatus, notes: string, testerName: string) => void;
   onReportBug: (bug: any) => void;
+  userRole?: string;
+  onCrudTestCase?: (action: "create" | "edit" | "clone" | "delete", tc?: TestCase) => void;
 }) {
+  const isAdmin = userRole === "admin" || userRole === "lead";
   const [status, setStatus] = useState<TestStatus>(tc.status);
   const [notes, setNotes] = useState(tc.notes || "");
   // Prefill tester name from currentTester (priority) or existing testerName
@@ -1503,7 +1652,40 @@ function TestCaseDetailDialog({
               </span>
             )}
           </div>
-          <DialogTitle className="text-base">{tc.title}</DialogTitle>
+          <DialogTitle className="text-base flex items-start justify-between gap-3">
+            <span>{tc.title}</span>
+            {isAdmin && onCrudTestCase && (
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-sky-700 hover:bg-sky-50"
+                  onClick={() => { onClose(); onCrudTestCase("edit", tc); }}
+                  title="Edit this test case"
+                >
+                  <Pencil className="size-3.5" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-violet-700 hover:bg-violet-50"
+                  onClick={() => { onClose(); onCrudTestCase("clone", tc); }}
+                  title="Clone this test case"
+                >
+                  <Copy className="size-3.5" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-rose-700 hover:bg-rose-50"
+                  onClick={() => { onClose(); onCrudTestCase("delete", tc); }}
+                  title="Delete this test case"
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            )}
+          </DialogTitle>
           {tc.decisionNeeded && (
             <p className="text-xs text-amber-700 mt-1 bg-amber-50 border border-amber-200 rounded p-2">
               <strong>Pending founder/product decision.</strong> This test case covers a refund-policy number that was never defined elsewhere in the spec. The proposed default is in the expected result below — confirm or replace before launch.
@@ -2644,6 +2826,473 @@ function SummaryStat({ label, value, accent = "slate" }: { label: string; value:
     <div className={`rounded-lg p-3 ${colors[accent]}`}>
       <div className="text-[10px] uppercase font-semibold opacity-70">{label}</div>
       <div className="text-lg font-bold">{value}</div>
+    </div>
+  );
+}
+
+/* ---------------- Test Case CRUD Dialog (Admin Only) ---------------- */
+function TestCaseCrudDialog({
+  action, testCase, testers, onClose, onSuccess,
+}: {
+  action: "create" | "edit" | "clone" | "delete";
+  testCase: TestCase | null;
+  testers: TesterStat[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { toast } = useToast();
+  const isDelete = action === "delete";
+  const [loading, setLoading] = useState(false);
+
+  // Form state
+  const [title, setTitle] = useState(testCase?.title ?? "");
+  const [description, setDescription] = useState(testCase?.description ?? "");
+  const [steps, setSteps] = useState(testCase?.steps ?? "");
+  const [expected, setExpected] = useState(testCase?.expected ?? "");
+  const [priority, setPriority] = useState<Priority>(testCase?.priority ?? "medium");
+  const [category, setCategory] = useState<Category>(testCase?.category ?? "functional");
+  const [specReference, setSpecReference] = useState(testCase?.specReference ?? "");
+  const [decisionNeeded, setDecisionNeeded] = useState(testCase?.decisionNeeded ?? false);
+  const [assignedTesterId, setAssignedTesterId] = useState(testCase?.assignedTester?.id ?? "");
+  const [suiteId, setSuiteId] = useState(testCase?.suite?.id ?? "");
+
+  const [suites, setSuites] = useState<any[]>([]);
+  useEffect(() => {
+    fetch("/api/modules")
+      .then((r) => r.json())
+      .then((data) => {
+        const all: any[] = [];
+        data.modules?.forEach((m: any) => {
+          m.suites?.forEach((s: any) => {
+            all.push({ id: s.id, name: `${m.name} → ${s.name}`, moduleName: m.name });
+          });
+        });
+        setSuites(all);
+        if (!testCase?.suite?.id && all.length > 0) {
+          setSuiteId(all[0].id);
+        }
+      });
+  }, [testCase]);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      if (action === "create") {
+        const res = await fetch("/api/test-cases", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            suiteId, title, description, steps, expected,
+            priority, category, specReference, decisionNeeded,
+            assignedTesterId: assignedTesterId || null,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || "Failed");
+        toast({ title: "Test case created", description: title });
+      } else if (action === "edit" && testCase) {
+        const res = await fetch(`/api/test-cases/${testCase.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title, description, steps, expected,
+            priority, category, specReference, decisionNeeded,
+            assignedTesterId: assignedTesterId || null,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || "Failed");
+        toast({ title: "Test case updated", description: title });
+      } else if (action === "clone" && testCase) {
+        const res = await fetch(`/api/test-cases/${testCase.id}`, { method: "POST" });
+        if (!res.ok) throw new Error((await res.json()).error || "Failed");
+        toast({ title: "Test case cloned", description: `${testCase.title} (Clone)` });
+      }
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!testCase) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/test-cases/${testCase.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      toast({ title: "Test case deleted", description: testCase.title });
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {action === "create" && <><Plus className="size-4 text-emerald-600" /> Create New Test Case</>}
+            {action === "edit" && <><Pencil className="size-4 text-sky-600" /> Edit Test Case</>}
+            {action === "clone" && <><Copy className="size-4 text-violet-600" /> Clone Test Case</>}
+            {action === "delete" && <><Trash2 className="size-4 text-rose-600" /> Delete Test Case</>}
+          </DialogTitle>
+        </DialogHeader>
+
+        {isDelete ? (
+          <div className="space-y-4 py-2">
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+              <p className="text-sm font-semibold text-rose-800 mb-1">Are you sure?</p>
+              <p className="text-xs text-rose-700">
+                You are about to delete <strong>"{testCase?.title}"</strong>. This will also delete:
+              </p>
+              <ul className="text-xs text-rose-700 mt-2 ml-4 list-disc">
+                <li>All execution history ({testCase?.executions?.length ?? 0} executions)</li>
+                <li>All linked bugs ({testCase?.bugs?.length ?? 0} bugs)</li>
+              </ul>
+              <p className="text-xs text-rose-700 mt-2">This action cannot be undone.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={loading}>
+                {loading ? "Deleting…" : "Delete permanently"}
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : action === "clone" ? (
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-slate-600">
+              This will create a copy of <strong>"{testCase?.title}"</strong> with the same:
+              suite, description, steps, expected result, priority, category, spec reference,
+              and decision-needed flag. The clone will have status "Not Run".
+            </p>
+            <DialogFooter>
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button onClick={handleSave} disabled={loading} className="bg-violet-600 hover:bg-violet-700">
+                <Copy className="size-3.5 mr-1.5" />
+                {loading ? "Cloning…" : "Clone test case"}
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs">Test Case Title *</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Verify login with valid credentials" className="mt-1" />
+            </div>
+
+            <div>
+              <Label className="text-xs">Suite *</Label>
+              <Select value={suiteId} onValueChange={setSuiteId}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select suite" /></SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {suites.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Priority</Label>
+                <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="critical">Critical</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Category</Label>
+                <Select value={category} onValueChange={(v) => setCategory(v as Category)}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="functional">Functional</SelectItem>
+                    <SelectItem value="ui">UI</SelectItem>
+                    <SelectItem value="integration">Integration</SelectItem>
+                    <SelectItem value="security">Security</SelectItem>
+                    <SelectItem value="payment">Payment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs">Description</Label>
+              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this test case verify?" className="mt-1 min-h-16" />
+            </div>
+
+            <div>
+              <Label className="text-xs">Steps to Reproduce</Label>
+              <Textarea value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="1. Go to…&#10;2. Click…&#10;3. Verify…" className="mt-1 min-h-20 font-mono text-xs" />
+            </div>
+
+            <div>
+              <Label className="text-xs">Expected Result</Label>
+              <Textarea value={expected} onChange={(e) => setExpected(e.target.value)} placeholder="What should happen if the test passes?" className="mt-1 min-h-16" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Spec Reference</Label>
+                <Input value={specReference} onChange={(e) => setSpecReference(e.target.value)} placeholder="e.g. Sec 5.2" className="mt-1 font-mono text-xs" />
+              </div>
+              <div>
+                <Label className="text-xs">Assign To</Label>
+                <Select value={assignedTesterId} onValueChange={setAssignedTesterId}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">— Unassigned —</SelectItem>
+                    {testers.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer mt-2">
+              <input
+                type="checkbox"
+                checked={decisionNeeded}
+                onChange={(e) => setDecisionNeeded(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-xs">
+                Mark as <strong className="text-amber-700">DECISION NEEDED</strong> (pending founder/product confirmation)
+              </span>
+            </label>
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button
+                onClick={handleSave}
+                disabled={loading || !title || !suiteId}
+                className={action === "edit" ? "bg-sky-600 hover:bg-sky-700" : "bg-emerald-600 hover:bg-emerald-700"}
+              >
+                {loading ? "Saving…" : action === "edit" ? "Save changes" : "Create test case"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------------- Audit Log View (Admin Only) ---------------- */
+function AuditLogView({ userRole }: { userRole?: string }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionFilter, setActionFilter] = useState("all");
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (actionFilter !== "all") params.set("action", actionFilter);
+      params.set("limit", "100");
+      const res = await fetch(`/api/audit?${params.toString()}`);
+      if (res.status === 403) {
+        setLogs([]);
+        setLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setLogs(data.logs || []);
+    } catch {
+      setLogs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [actionFilter]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  if (userRole !== "admin" && userRole !== "lead") {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <ScrollText className="size-10 mx-auto mb-3 text-slate-300" />
+          <h3 className="text-base font-semibold text-slate-700">Admin Access Required</h3>
+          <p className="text-sm text-slate-500 mt-1">The audit log is only visible to admin users.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Audit Log</h2>
+          <p className="text-sm text-slate-500">Every action taken in the system — who did what and when</p>
+        </div>
+        <Select value={actionFilter} onValueChange={setActionFilter}>
+          <SelectTrigger className="w-56 h-9 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All actions</SelectItem>
+            <SelectItem value="test_case">Test cases</SelectItem>
+            <SelectItem value="bug">Bugs</SelectItem>
+            <SelectItem value="auth">Authentication</SelectItem>
+            <SelectItem value="tester">Testers</SelectItem>
+            <SelectItem value="system">System</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <ScrollArea className="h-[calc(100vh-16rem)]">
+            {loading ? (
+              <div className="text-center text-sm text-slate-400 py-12">Loading audit log…</div>
+            ) : logs.length === 0 ? (
+              <div className="text-center text-sm text-slate-400 py-12">
+                <ScrollText className="size-8 mx-auto mb-2 text-slate-300" />
+                No audit log entries
+              </div>
+            ) : (
+              <Table>
+                <TableHeader className="sticky top-0 bg-white z-10">
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>User</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs.map((l) => (
+                    <TableRow key={l.id} className="text-xs">
+                      <TableCell className="text-slate-500 whitespace-nowrap">
+                        {new Date(l.createdAt).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="font-medium">{l.user?.name ?? "System"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px] font-mono">{l.action}</Badge>
+                      </TableCell>
+                      <TableCell className="text-slate-600">{l.details}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------- Requirements Coverage View ---------------- */
+function RequirementsView() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/requirements-coverage")
+      .then((r) => r.json())
+      .then((d) => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-center text-sm text-slate-400 py-12">Loading requirements coverage…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-slate-900">Requirements Coverage</h2>
+        <p className="text-sm text-slate-500">
+          Test cases grouped by spec section — see which parts of the product spec have tests and their pass rates
+        </p>
+      </div>
+
+      {data && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Card><CardContent className="p-3">
+            <div className="text-[10px] uppercase text-slate-500 font-semibold">Spec Sections</div>
+            <div className="text-xl font-bold text-slate-900">{data.totalSpecSections}</div>
+          </CardContent></Card>
+          <Card><CardContent className="p-3">
+            <div className="text-[10px] uppercase text-slate-500 font-semibold">Tests with Spec</div>
+            <div className="text-xl font-bold text-slate-900">{data.totalTestCasesWithSpec}</div>
+          </CardContent></Card>
+          <Card><CardContent className="p-3">
+            <div className="text-[10px] uppercase text-slate-500 font-semibold">Tests without Spec</div>
+            <div className="text-xl font-bold text-amber-700">{data.untraceableCount}</div>
+          </CardContent></Card>
+          <Card><CardContent className="p-3">
+            <div className="text-[10px] uppercase text-slate-500 font-semibold">Coverage</div>
+            <div className="text-xl font-bold text-emerald-700">
+              {data.totalTestCasesWithSpec + data.untraceableCount > 0
+                ? Math.round((data.totalTestCasesWithSpec / (data.totalTestCasesWithSpec + data.untraceableCount)) * 100)
+                : 0}%
+            </div>
+          </CardContent></Card>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">Spec Sections Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Spec Section</TableHead>
+                <TableHead className="text-center">Tests</TableHead>
+                <TableHead className="text-center">Pass</TableHead>
+                <TableHead className="text-center">Fail</TableHead>
+                <TableHead className="text-center">Not Run</TableHead>
+                <TableHead className="text-center">Decisions</TableHead>
+                <TableHead className="text-center">Coverage</TableHead>
+                <TableHead className="text-center">Pass Rate</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data?.sections?.map((s: any) => (
+                <TableRow key={s.section}>
+                  <TableCell className="font-mono text-xs">{s.section}</TableCell>
+                  <TableCell className="text-center">{s.total}</TableCell>
+                  <TableCell className="text-center text-emerald-700 font-medium">{s.pass}</TableCell>
+                  <TableCell className="text-center text-rose-700 font-medium">{s.fail}</TableCell>
+                  <TableCell className="text-center text-slate-500">{s.notRun}</TableCell>
+                  <TableCell className="text-center">
+                    {s.decisionsNeeded > 0 ? (
+                      <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 text-[10px]">
+                        <AlertTriangle className="size-2.5 mr-1" />
+                        {s.decisionsNeeded}
+                      </Badge>
+                    ) : <span className="text-slate-300 text-xs">—</span>}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center gap-1.5 justify-center">
+                      <Progress value={s.coverage} className="h-1.5 w-12" />
+                      <span className="text-xs">{s.coverage}%</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center gap-1.5 justify-center">
+                      <Progress value={s.passRate} className="h-1.5 w-12" />
+                      <span className="text-xs font-medium">{s.passRate}%</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

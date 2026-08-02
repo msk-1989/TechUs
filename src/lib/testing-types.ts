@@ -46,6 +46,7 @@ export interface TestCase {
     };
   };
   bugs: Bug[];
+  assignedTester?: { id: string; name: string; color: string } | null;
   executions: {
     id: string;
     status: string;
