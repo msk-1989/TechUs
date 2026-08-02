@@ -95,6 +95,42 @@ export async function GET() {
   const overallPassRate = totalTestCases > 0 ? Math.round((passCount / totalTestCases) * 100) : 0;
   const overallCoverage = totalTestCases > 0 ? Math.round(((passCount + failCount + blockedCount + skippedCount) / totalTestCases) * 100) : 0;
 
+  // Tester activity stats (top-level summary only — full data via /api/testers)
+  const testers = await db.tester.findMany({
+    include: {
+      executions: { select: { status: true, executedAt: true } },
+      reportedBugs: { select: { id: true } },
+      assignedBugs: { select: { id: true, status: true } },
+    },
+  });
+
+  const testerStats = testers.map((t) => {
+    const pass = t.executions.filter((e) => e.status === "pass").length;
+    const fail = t.executions.filter((e) => e.status === "fail").length;
+    const blocked = t.executions.filter((e) => e.status === "blocked").length;
+    const skipped = t.executions.filter((e) => e.status === "skipped").length;
+    const total = t.executions.length;
+    const lastActive = t.executions[0]?.executedAt ?? null;
+    const openAssigned = t.assignedBugs.filter((b) => b.status === "open" || b.status === "in_progress").length;
+    return {
+      id: t.id,
+      name: t.name,
+      role: t.role,
+      color: t.color,
+      active: t.active,
+      totalExecutions: total,
+      pass,
+      fail,
+      blocked,
+      skipped,
+      passRate: total > 0 ? Math.round((pass / total) * 100) : 0,
+      bugsReported: t.reportedBugs.length,
+      bugsAssigned: t.assignedBugs.length,
+      openAssignedBugs: openAssigned,
+      lastActive,
+    };
+  });
+
   return NextResponse.json({
     summary: {
       totalTestCases,
@@ -108,9 +144,12 @@ export async function GET() {
       criticalBugs,
       overallPassRate,
       overallCoverage,
+      totalTesters: testers.length,
+      activeTesters: testers.filter((t) => t.active).length,
     },
     moduleStats,
     categoryStats,
     priorityStats,
+    testerStats,
   });
 }

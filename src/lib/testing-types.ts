@@ -50,6 +50,7 @@ export interface TestCase {
     notes: string | null;
     executedBy: string | null;
     executedAt: string;
+    tester?: { id: string; name: string; color: string } | null;
   }[];
 }
 
@@ -62,7 +63,9 @@ export interface Bug {
   status: BugStatus;
   moduleName: string | null;
   reporter: string | null;
+  reporterId: string | null;
   assignee: string | null;
+  assigneeId: string | null;
   stepsToRepro: string | null;
   expected: string | null;
   actual: string | null;
@@ -76,6 +79,43 @@ export interface Bug {
       module: { name: string };
     };
   } | null;
+  reporterRef?: { id: string; name: string; color: string } | null;
+  assigneeRef?: { id: string; name: string; color: string } | null;
+}
+
+export interface TesterStat {
+  id: string;
+  name: string;
+  email?: string | null;
+  role: string;
+  color: string;
+  active: boolean;
+  stats: {
+    totalExecutions: number;
+    pass: number;
+    fail: number;
+    blocked: number;
+    skipped: number;
+    passRate: number;
+    bugsReported: number;
+    bugsAssigned: number;
+    modulesTouched: number;
+    lastActive: string | null;
+  };
+  recentExecutions: {
+    id: string;
+    status: string;
+    notes: string | null;
+    executedAt: string;
+    testCase: { id: string; title: string; module: string };
+  }[];
+  recentBugs: {
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+    createdAt: string;
+  }[];
 }
 
 export const STATUS_META: Record<TestStatus, { label: string; color: string; bg: string; text: string; dot: string }> = {

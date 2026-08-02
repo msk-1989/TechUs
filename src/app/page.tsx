@@ -33,10 +33,13 @@ import {
   ExternalLink,
   Calendar,
   User,
+  Users,
   Activity,
   Target,
   PieChart as PieChartIcon,
   FileBarChart,
+  Crown,
+  Mail,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -68,17 +71,37 @@ import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import {
   STATUS_META, PRIORITY_META, CATEGORY_META, BUG_SEVERITY_META, BUG_STATUS_META,
-  type TestCase, type Bug, type ModuleStat, type TestStatus, type Priority, type Category, type BugSeverity, type BugStatus,
+  type TestCase, type Bug, type ModuleStat, type TesterStat, type TestStatus, type Priority, type Category, type BugSeverity, type BugStatus,
 } from "@/lib/testing-types";
+import {
+  useTesterStore, testerColor, initials,
+  type CurrentTester,
+} from "@/lib/tester-store";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-type ViewKey = "dashboard" | "test_cases" | "bugs" | "modules" | "reports";
+const TESTER_ROLE_META: Record<string, { label: string; icon: typeof Crown }> = {
+  lead:   { label: "QA Lead",     icon: Crown },
+  admin:  { label: "Admin",       icon: Shield },
+  tester: { label: "Tester",       icon: User },
+};
+
+type ViewKey = "dashboard" | "test_cases" | "bugs" | "testers" | "modules" | "reports";
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "test_cases", label: "Test Cases", icon: ListChecks },
-  { key: "bugs", label: "Bug Tracker", icon: BugIcon },
-  { key: "modules", label: "Module Reports", icon: BarChart3 },
-  { key: "reports", label: "Reports", icon: FileBarChart },
+  { key: "bugs",       label: "Bug Tracker", icon: BugIcon },
+  { key: "testers",    label: "Testers",     icon: Users },
+  { key: "modules",    label: "Module Reports", icon: BarChart3 },
+  { key: "reports",    label: "Reports",     icon: FileBarChart },
 ];
 
 const MODULE_ICONS: Record<string, typeof Globe> = {
@@ -98,8 +121,11 @@ export default function HomePage() {
   const [stats, setStats] = useState<any>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [bugs, setBugs] = useState<Bug[]>([]);
+  const [testers, setTesters] = useState<TesterStat[]>([]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const currentTester = useTesterStore((s) => s.currentTester);
+  const setCurrentTester = useTesterStore((s) => s.setCurrentTester);
 
   const refreshStats = useCallback(async () => {
     try {
@@ -108,6 +134,16 @@ export default function HomePage() {
       setStats(data);
     } catch (e) {
       toast({ title: "Failed to load stats", variant: "destructive" });
+    }
+  }, [toast]);
+
+  const refreshTesters = useCallback(async () => {
+    try {
+      const res = await fetch("/api/testers");
+      const data = await res.json();
+      setTesters(data.testers);
+    } catch (e) {
+      toast({ title: "Failed to load testers", variant: "destructive" });
     }
   }, [toast]);
 
@@ -140,11 +176,39 @@ export default function HomePage() {
     refreshStats();
     refreshTestCases();
     refreshBugs();
-  }, [refreshStats, refreshTestCases, refreshBugs]);
+    refreshTesters();
+  }, [refreshStats, refreshTestCases, refreshBugs, refreshTesters]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
-      <Header />
+      <Header
+        testers={testers}
+        currentTester={currentTester}
+        onPickTester={setCurrentTester}
+        onAddTester={async (name, role, color) => {
+          try {
+            const res = await fetch("/api/testers", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name, role, color }),
+            });
+            const data = await res.json();
+            toast({ title: "Tester added", description: name });
+            refreshTesters();
+            refreshStats();
+            if (data.tester) {
+              setCurrentTester({
+                id: data.tester.id,
+                name: data.tester.name,
+                role: data.tester.role,
+                color: data.tester.color,
+              });
+            }
+          } catch (e) {
+            toast({ title: "Failed to add tester", variant: "destructive" });
+          }
+        }}
+      />
       <div className="flex flex-1 flex-col md:flex-row">
         <Sidebar view={view} onViewChange={setView} stats={stats} />
         <main className="flex-1 p-4 md:p-6 overflow-x-hidden">
@@ -162,6 +226,8 @@ export default function HomePage() {
               {view === "test_cases" && (
                 <TestCasesView
                   testCases={testCases}
+                  testers={testers}
+                  currentTester={currentTester}
                   loading={loading}
                   onRefresh={refreshTestCases}
                   onUpdateStatus={async (id, status, notes, testerName) => {
@@ -169,11 +235,16 @@ export default function HomePage() {
                       await fetch("/api/test-cases", {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ id, status, notes, testerName, createExecution: true }),
+                        body: JSON.stringify({
+                          id, status, notes, testerName,
+                          testerId: currentTester?.id,
+                          createExecution: true,
+                        }),
                       });
-                      toast({ title: "Test case updated", description: `Status: ${STATUS_META[status].label}` });
+                      toast({ title: "Test case updated", description: `Status: ${STATUS_META[status].label}${currentTester ? ` · by ${currentTester.name}` : ""}` });
                       refreshTestCases();
                       refreshStats();
+                      refreshTesters();
                     } catch (e) {
                       toast({ title: "Update failed", variant: "destructive" });
                     }
@@ -183,11 +254,16 @@ export default function HomePage() {
                       await fetch("/api/bugs", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(bugData),
+                        body: JSON.stringify({
+                          ...bugData,
+                          reporter: currentTester?.name ?? bugData.reporter,
+                          reporterId: currentTester?.id ?? null,
+                        }),
                       });
                       toast({ title: "Bug reported", description: bugData.title });
                       refreshBugs();
                       refreshStats();
+                      refreshTesters();
                     } catch (e) {
                       toast({ title: "Bug creation failed", variant: "destructive" });
                     }
@@ -197,6 +273,8 @@ export default function HomePage() {
               {view === "bugs" && (
                 <BugsView
                   bugs={bugs}
+                  testers={testers}
+                  currentTester={currentTester}
                   onRefresh={refreshBugs}
                   onUpdateBug={async (id, updates) => {
                     try {
@@ -208,6 +286,7 @@ export default function HomePage() {
                       toast({ title: "Bug updated" });
                       refreshBugs();
                       refreshStats();
+                      refreshTesters();
                     } catch (e) {
                       toast({ title: "Update failed", variant: "destructive" });
                     }
@@ -217,13 +296,42 @@ export default function HomePage() {
                       await fetch("/api/bugs", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(bugData),
+                        body: JSON.stringify({
+                          ...bugData,
+                          reporter: currentTester?.name ?? bugData.reporter,
+                          reporterId: currentTester?.id ?? null,
+                        }),
                       });
                       toast({ title: "Bug created" });
                       refreshBugs();
                       refreshStats();
+                      refreshTesters();
                     } catch (e) {
                       toast({ title: "Creation failed", variant: "destructive" });
+                    }
+                  }}
+                />
+              )}
+              {view === "testers" && (
+                <TestersView
+                  testers={testers}
+                  onRefresh={refreshTesters}
+                  onPickTester={(t) => {
+                    setCurrentTester({ id: t.id, name: t.name, role: t.role, color: t.color });
+                    toast({ title: `Switched to ${t.name}`, description: "All new executions and bugs will be attributed to this tester" });
+                  }}
+                  onToggleActive={async (id, active) => {
+                    try {
+                      await fetch("/api/testers", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id, active }),
+                      });
+                      toast({ title: `Tester ${active ? "activated" : "deactivated"}` });
+                      refreshTesters();
+                      refreshStats();
+                    } catch (e) {
+                      toast({ title: "Update failed", variant: "destructive" });
                     }
                   }}
                 />
@@ -241,7 +349,21 @@ export default function HomePage() {
 }
 
 /* ---------------- Header ---------------- */
-function Header() {
+function Header({
+  testers, currentTester, onPickTester, onAddTester,
+}: {
+  testers: TesterStat[];
+  currentTester: CurrentTester | null;
+  onPickTester: (t: CurrentTester) => void;
+  onAddTester: (name: string, role: string, color: string) => void;
+}) {
+  const [showAddTester, setShowAddTester] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState("tester");
+  const [newColor, setNewColor] = useState("emerald");
+
+  const colorOptions = ["emerald", "violet", "amber", "sky", "rose", "teal"];
+
   return (
     <header className="sticky top-0 z-30 border-b bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="flex h-16 items-center gap-4 px-4 md:px-6">
@@ -257,6 +379,96 @@ function Header() {
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {/* Tester selector */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-2 px-2">
+                {currentTester ? (
+                  <>
+                    <Avatar className="size-6">
+                      <AvatarFallback className={`text-[10px] font-bold bg-gradient-to-br ${testerColor(currentTester.color).gradient} text-white`}>
+                        {initials(currentTester.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs font-medium hidden sm:inline">{currentTester.name}</span>
+                    <ChevronDown className="size-3.5 text-slate-400" />
+                  </>
+                ) : (
+                  <>
+                    <Avatar className="size-6">
+                      <AvatarFallback className="text-[10px] bg-slate-100 text-slate-500">
+                        <User className="size-3.5" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs text-slate-500 hidden sm:inline">Select tester</span>
+                    <ChevronDown className="size-3.5 text-slate-400" />
+                  </>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel className="text-[11px] uppercase text-slate-500">
+                Switch active tester
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {testers.length === 0 && (
+                <div className="px-2 py-3 text-xs text-slate-400 text-center">
+                  No testers yet. Add one below.
+                </div>
+              )}
+              {testers.map((t) => {
+                const isActive = currentTester?.id === t.id;
+                const colorCls = testerColor(t.color);
+                const RoleIcon = TESTER_ROLE_META[t.role]?.icon ?? User;
+                return (
+                  <DropdownMenuItem
+                    key={t.id}
+                    onClick={() => onPickTester({ id: t.id, name: t.name, role: t.role, color: t.color })}
+                    className="gap-2 py-2"
+                  >
+                    <Avatar className="size-7">
+                      <AvatarFallback className={`text-[10px] font-bold bg-gradient-to-br ${colorCls.gradient} text-white`}>
+                        {initials(t.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-slate-900 flex items-center gap-1.5">
+                        {t.name}
+                        {!t.active && (
+                          <span className="text-[9px] text-slate-400 bg-slate-100 rounded px-1">inactive</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                        <RoleIcon className="size-2.5" />
+                        {TESTER_ROLE_META[t.role]?.label ?? "Tester"}
+                        <span>·</span>
+                        <span>{t.stats.totalExecutions} runs</span>
+                      </div>
+                    </div>
+                    {isActive && <CheckCircle2 className="size-4 text-emerald-600" />}
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setShowAddTester(true)}
+                className="gap-2 text-emerald-700"
+              >
+                <Plus className="size-4" />
+                <span className="text-xs font-medium">Add new tester…</span>
+              </DropdownMenuItem>
+              {currentTester && (
+                <DropdownMenuItem
+                  onClick={() => onPickTester(null as any)}
+                  className="gap-2 text-slate-500"
+                >
+                  <X className="size-4" />
+                  <span className="text-xs">Clear current tester</span>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Badge variant="outline" className="hidden sm:flex border-emerald-200 bg-emerald-50 text-emerald-700">
             <span className="size-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
             Live
@@ -267,6 +479,71 @@ function Header() {
           </Badge>
         </div>
       </div>
+
+      {/* Add Tester Dialog */}
+      {showAddTester && (
+        <Dialog open onOpenChange={(o) => !o && setShowAddTester(false)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add new tester</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs">Full name *</Label>
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. Aarav Sharma"
+                  className="mt-1"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Role</Label>
+                <Select value={newRole} onValueChange={setNewRole}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tester">Tester</SelectItem>
+                    <SelectItem value="lead">QA Lead</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Color (avatar)</Label>
+                <div className="flex gap-2 mt-1.5 flex-wrap">
+                  {colorOptions.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setNewColor(c)}
+                      className={`size-8 rounded-full bg-gradient-to-br ${testerColor(c).gradient} flex items-center justify-center transition-all ${
+                        newColor === c ? "ring-2 ring-offset-2 ring-slate-400 scale-110" : ""
+                      }`}
+                    >
+                      {newColor === c && <CheckCircle2 className="size-4 text-white" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowAddTester(false)}>Cancel</Button>
+              <Button
+                disabled={!newName}
+                onClick={() => {
+                  onAddTester(newName, newRole, newColor);
+                  setNewName("");
+                  setShowAddTester(false);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                <Plus className="size-3.5 mr-1" /> Add tester
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </header>
   );
 }
@@ -285,6 +562,7 @@ function Sidebar({
           const count =
             item.key === "test_cases" ? counts?.totalTestCases :
             item.key === "bugs" ? counts?.openBugs :
+            item.key === "testers" ? counts?.totalTesters :
             item.key === "modules" ? stats?.moduleStats?.length :
             null;
           return (
@@ -619,9 +897,11 @@ function LoadingSkeleton() {
 
 /* ---------------- Test Cases View ---------------- */
 function TestCasesView({
-  testCases, loading, onRefresh, onUpdateStatus, onReportBug,
+  testCases, testers, currentTester, loading, onRefresh, onUpdateStatus, onReportBug,
 }: {
   testCases: TestCase[];
+  testers: TesterStat[];
+  currentTester: CurrentTester | null;
   loading: boolean;
   onRefresh: (filters?: Record<string, string>) => void;
   onUpdateStatus: (id: string, status: TestStatus, notes: string, testerName: string) => void;
@@ -644,7 +924,18 @@ function TestCasesView({
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900">Test Cases</h2>
-          <p className="text-sm text-slate-500">{testCases.length} cases · click any row to execute</p>
+          <p className="text-sm text-slate-500">
+            {testCases.length} cases · click any row to execute
+            {currentTester && (
+              <>
+                {" · "}
+                <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                  <span className={`size-1.5 rounded-full ${testerColor(currentTester.color).dot}`} />
+                  All new runs attributed to {currentTester.name}
+                </span>
+              </>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -667,7 +958,7 @@ function TestCasesView({
       {showFilters && (
         <Card>
           <CardContent className="p-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
               <FilterSelect
                 label="Module"
                 value={filters.moduleId || "all"}
@@ -721,6 +1012,17 @@ function TestCasesView({
                   { value: "payment", label: "Payment" },
                 ]}
               />
+              <FilterSelect
+                label="Tester"
+                value={filters.testerId || "all"}
+                onChange={(v) => setFilters((f) => ({ ...f, testerId: v }))}
+                options={[
+                  { value: "all", label: "Any tester" },
+                  { value: "none", label: "Never executed" },
+                  { value: "any", label: "Executed by anyone" },
+                  ...testers.map((t) => ({ value: t.id, label: t.name })),
+                ]}
+              />
             </div>
           </CardContent>
         </Card>
@@ -732,65 +1034,86 @@ function TestCasesView({
             <Table>
               <TableHeader className="sticky top-0 bg-white z-10">
                 <TableRow>
-                  <TableHead className="w-[40%]">Test Case</TableHead>
+                  <TableHead className="w-[38%]">Test Case</TableHead>
                   <TableHead>Module / Suite</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead>Last Tester</TableHead>
                   <TableHead className="text-right">Bugs</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-slate-400 py-8">
+                    <TableCell colSpan={7} className="text-center text-slate-400 py-8">
                       Loading…
                     </TableCell>
                   </TableRow>
                 )}
                 {!loading && testCases.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-slate-400 py-8">
+                    <TableCell colSpan={7} className="text-center text-slate-400 py-8">
                       No test cases match your filters.
                     </TableCell>
                   </TableRow>
                 )}
-                {!loading && testCases.slice(0, 200).map((tc) => (
-                  <TableRow
-                    key={tc.id}
-                    onClick={() => setSelectedTc(tc)}
-                    className="cursor-pointer hover:bg-slate-50"
-                  >
-                    <TableCell>
-                      <div className="font-medium text-slate-900 text-sm line-clamp-1">{tc.title}</div>
-                      {tc.description && (
-                        <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{tc.description}</div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-xs text-slate-700 font-medium">{tc.suite.module.name}</div>
-                      <div className="text-[10px] text-slate-500">{tc.suite.name}</div>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={tc.status} />
-                    </TableCell>
-                    <TableCell>
-                      <PriorityBadge priority={tc.priority} />
-                    </TableCell>
-                    <TableCell>
-                      <CategoryBadge category={tc.category} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {tc.bugs.length > 0 ? (
-                        <Badge variant="outline" className="text-rose-600 border-rose-200 bg-rose-50">
-                          <BugIcon className="size-3 mr-1" />{tc.bugs.length}
-                        </Badge>
-                      ) : (
-                        <span className="text-slate-300 text-xs">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {!loading && testCases.slice(0, 200).map((tc) => {
+                  const lastExec = tc.executions[0];
+                  const lastTester = lastExec?.tester ?? null;
+                  return (
+                    <TableRow
+                      key={tc.id}
+                      onClick={() => setSelectedTc(tc)}
+                      className="cursor-pointer hover:bg-slate-50"
+                    >
+                      <TableCell>
+                        <div className="font-medium text-slate-900 text-sm line-clamp-1">{tc.title}</div>
+                        {tc.description && (
+                          <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{tc.description}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-xs text-slate-700 font-medium">{tc.suite.module.name}</div>
+                        <div className="text-[10px] text-slate-500">{tc.suite.name}</div>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={tc.status} />
+                      </TableCell>
+                      <TableCell>
+                        <PriorityBadge priority={tc.priority} />
+                      </TableCell>
+                      <TableCell>
+                        <CategoryBadge category={tc.category} />
+                      </TableCell>
+                      <TableCell>
+                        {lastTester ? (
+                          <div className="flex items-center gap-1.5">
+                            <Avatar className="size-5">
+                              <AvatarFallback className={`text-[9px] font-bold bg-gradient-to-br ${testerColor(lastTester.color).gradient} text-white`}>
+                                {initials(lastTester.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-[11px] text-slate-600 truncate max-w-20">{lastTester.name}</span>
+                          </div>
+                        ) : lastExec?.executedBy ? (
+                          <span className="text-[11px] text-slate-500 italic">{lastExec.executedBy}</span>
+                        ) : (
+                          <span className="text-slate-300 text-xs">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {tc.bugs.length > 0 ? (
+                          <Badge variant="outline" className="text-rose-600 border-rose-200 bg-rose-50">
+                            <BugIcon className="size-3 mr-1" />{tc.bugs.length}
+                          </Badge>
+                        ) : (
+                          <span className="text-slate-300 text-xs">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
             {testCases.length > 200 && (
@@ -805,6 +1128,7 @@ function TestCasesView({
       {selectedTc && (
         <TestCaseDetailDialog
           tc={selectedTc}
+          currentTester={currentTester}
           onClose={() => setSelectedTc(null)}
           onUpdateStatus={onUpdateStatus}
           onReportBug={onReportBug}
@@ -871,23 +1195,28 @@ function CategoryBadge({ category }: { category: Category }) {
 
 /* ---------------- Test Case Detail Dialog ---------------- */
 function TestCaseDetailDialog({
-  tc, onClose, onUpdateStatus, onReportBug,
+  tc, currentTester, onClose, onUpdateStatus, onReportBug,
 }: {
   tc: TestCase;
+  currentTester: CurrentTester | null;
   onClose: () => void;
   onUpdateStatus: (id: string, status: TestStatus, notes: string, testerName: string) => void;
   onReportBug: (bug: any) => void;
 }) {
   const [status, setStatus] = useState<TestStatus>(tc.status);
   const [notes, setNotes] = useState(tc.notes || "");
-  const [testerName, setTesterName] = useState(tc.testerName || "");
+  // Prefill tester name from currentTester (priority) or existing testerName
+  const [testerName, setTesterName] = useState(
+    currentTester?.name ?? tc.testerName ?? ""
+  );
   const [showBugForm, setShowBugForm] = useState(false);
   const [bugTitle, setBugTitle] = useState("");
   const [bugDescription, setBugDescription] = useState("");
   const [bugSeverity, setBugSeverity] = useState<BugSeverity>("major");
 
   const handleSave = () => {
-    onUpdateStatus(tc.id, status, notes, testerName);
+    const finalName = currentTester?.name ?? testerName;
+    onUpdateStatus(tc.id, status, notes, finalName);
     onClose();
   };
 
@@ -903,6 +1232,7 @@ function TestCaseDetailDialog({
       stepsToRepro: tc.steps || "",
       expected: tc.expected || "",
       actual: "",
+      reporter: currentTester?.name ?? testerName,
     });
     setShowBugForm(false);
     setBugTitle("");
@@ -961,15 +1291,35 @@ function TestCaseDetailDialog({
           {tc.executions.length > 0 && (
             <div>
               <h4 className="text-[11px] uppercase font-semibold text-slate-500 mb-1.5">Execution History</h4>
-              <div className="space-y-1 text-xs">
-                {tc.executions.map((e) => (
-                  <div key={e.id} className="flex items-center gap-2 text-slate-600">
-                    <StatusBadge status={e.status as TestStatus} />
-                    <span>{new Date(e.executedAt).toLocaleString()}</span>
-                    {e.executedBy && <span className="text-slate-500">· by {e.executedBy}</span>}
-                    {e.notes && <span className="text-slate-500">· {e.notes}</span>}
-                  </div>
-                ))}
+              <div className="space-y-1.5 text-xs">
+                {tc.executions.map((e) => {
+                  const testerInfo = e.tester;
+                  const displayName = testerInfo?.name ?? e.executedBy;
+                  return (
+                    <div key={e.id} className="flex items-center gap-2 text-slate-600 border border-slate-100 rounded p-1.5 bg-slate-50/50">
+                      <StatusBadge status={e.status as TestStatus} />
+                      <span>{new Date(e.executedAt).toLocaleString()}</span>
+                      {displayName && (
+                        <span className="flex items-center gap-1 text-slate-500">
+                          · by
+                          {testerInfo ? (
+                            <>
+                              <Avatar className="size-4">
+                                <AvatarFallback className={`text-[8px] font-bold bg-gradient-to-br ${testerColor(testerInfo.color).gradient} text-white`}>
+                                  {initials(testerInfo.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="font-medium text-slate-700">{testerInfo.name}</span>
+                            </>
+                          ) : (
+                            <span className="italic">{e.executedBy}</span>
+                          )}
+                        </span>
+                      )}
+                      {e.notes && <span className="text-slate-500 italic">· "{e.notes}"</span>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1010,13 +1360,35 @@ function TestCaseDetailDialog({
                 </div>
               </div>
               <div>
-                <Label className="text-xs">Tester Name (optional)</Label>
-                <Input
-                  value={testerName}
-                  onChange={(e) => setTesterName(e.target.value)}
-                  placeholder="Your name"
-                  className="mt-1 h-9"
-                />
+                <Label className="text-xs flex items-center gap-1.5">
+                  Tester
+                  {currentTester ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-medium">
+                      <span className={`size-1.5 rounded-full ${testerColor(currentTester.color).dot}`} />
+                      Auto: {currentTester.name}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-normal">(no tester selected)</span>
+                  )}
+                </Label>
+                {currentTester ? (
+                  <div className={`mt-1 h-9 rounded-md border px-3 flex items-center gap-2 ${testerColor(currentTester.color).bg} ${testerColor(currentTester.color).text}`}>
+                    <Avatar className="size-5">
+                      <AvatarFallback className={`text-[9px] font-bold bg-gradient-to-br ${testerColor(currentTester.color).gradient} text-white`}>
+                        {initials(currentTester.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs font-medium">{currentTester.name}</span>
+                    <span className="text-[10px] opacity-70">· {TESTER_ROLE_META[currentTester.role]?.label ?? "Tester"}</span>
+                  </div>
+                ) : (
+                  <Input
+                    value={testerName}
+                    onChange={(e) => setTesterName(e.target.value)}
+                    placeholder="Pick a tester from header, or type name"
+                    className="mt-1 h-9"
+                  />
+                )}
               </div>
             </div>
             <div>
@@ -1083,9 +1455,11 @@ function TestCaseDetailDialog({
 
 /* ---------------- Bugs View ---------------- */
 function BugsView({
-  bugs, onRefresh, onUpdateBug, onCreateBug,
+  bugs, testers, currentTester, onRefresh, onUpdateBug, onCreateBug,
 }: {
   bugs: Bug[];
+  testers: TesterStat[];
+  currentTester: CurrentTester | null;
   onRefresh: (filters?: Record<string, string>) => void;
   onUpdateBug: (id: string, updates: any) => void;
   onCreateBug: (bug: any) => void;
@@ -1105,7 +1479,18 @@ function BugsView({
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900">Bug Tracker</h2>
-          <p className="text-sm text-slate-500">{bugs.length} bugs · {bugs.filter((b) => b.status === "open").length} open</p>
+          <p className="text-sm text-slate-500">
+            {bugs.length} bugs · {bugs.filter((b) => b.status === "open").length} open
+            {currentTester && (
+              <>
+                {" · "}
+                <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                  <span className={`size-1.5 rounded-full ${testerColor(currentTester.color).dot}`} />
+                  New bugs reported by {currentTester.name}
+                </span>
+              </>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -1125,7 +1510,7 @@ function BugsView({
 
       <Card>
         <CardContent className="p-3">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
             <FilterSelect
               label="Status"
               value={filters.status || "all"}
@@ -1166,6 +1551,27 @@ function BugsView({
                 { value: "Support & Ticketing System", label: "Support" },
               ]}
             />
+            <FilterSelect
+              label="Reporter"
+              value={filters.reporterId || "all"}
+              onChange={(v) => setFilters((f) => ({ ...f, reporterId: v }))}
+              options={[
+                { value: "all", label: "Anyone" },
+                { value: "none", label: "No reporter" },
+                ...testers.map((t) => ({ value: t.id, label: t.name })),
+              ]}
+            />
+            <FilterSelect
+              label="Assignee"
+              value={filters.assigneeId || "all"}
+              onChange={(v) => setFilters((f) => ({ ...f, assigneeId: v }))}
+              options={[
+                { value: "all", label: "Anyone" },
+                { value: "none", label: "Unassigned" },
+                { value: "any", label: "Has assignee" },
+                ...testers.map((t) => ({ value: t.id, label: t.name })),
+              ]}
+            />
           </div>
         </CardContent>
       </Card>
@@ -1179,106 +1585,151 @@ function BugsView({
             </CardContent>
           </Card>
         )}
-        {bugs.map((bug) => (
-          <Card key={bug.id} className="overflow-hidden">
-            <CardContent className="p-3.5">
-              <div className="flex items-start gap-3">
-                <div className={`size-2 rounded-full mt-1.5 ${
-                  bug.severity === "blocker" ? "bg-rose-700" :
-                  bug.severity === "critical" ? "bg-rose-500" :
-                  bug.severity === "major" ? "bg-orange-500" :
-                  "bg-amber-400"
-                }`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm text-slate-900">{bug.title}</p>
-                      {bug.testCase && (
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Linked: {bug.testCase.title}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${BUG_SEVERITY_META[bug.severity].bg} ${BUG_SEVERITY_META[bug.severity].text}`}>
-                        {BUG_SEVERITY_META[bug.severity].label}
-                      </span>
-                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${BUG_STATUS_META[bug.status].bg} ${BUG_STATUS_META[bug.status].text}`}>
-                        {BUG_STATUS_META[bug.status].label}
-                      </span>
-                    </div>
-                  </div>
-                  {bug.description && (
-                    <p className="text-xs text-slate-600 mt-1.5 line-clamp-2">{bug.description}</p>
-                  )}
-                  <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
-                    {bug.moduleName && <span className="flex items-center gap-1"><Globe className="size-3" />{bug.moduleName}</span>}
-                    {bug.reporter && <span className="flex items-center gap-1"><User className="size-3" />{bug.reporter}</span>}
-                    <span className="flex items-center gap-1"><Calendar className="size-3" />{new Date(bug.createdAt).toLocaleDateString()}</span>
-                    <button
-                      className="ml-auto text-emerald-600 hover:underline font-medium"
-                      onClick={() => setExpandedBug(expandedBug === bug.id ? null : bug.id)}
-                    >
-                      {expandedBug === bug.id ? "Hide" : "Details"}
-                    </button>
-                  </div>
-
-                  {expandedBug === bug.id && (
-                    <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                      {bug.stepsToRepro && (
-                        <div>
-                          <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Steps to Reproduce</p>
-                          <p className="text-xs text-slate-700 bg-slate-50 rounded p-2 whitespace-pre-wrap">{bug.stepsToRepro}</p>
-                        </div>
-                      )}
-                      {bug.expected && (
-                        <div>
-                          <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Expected</p>
-                          <p className="text-xs text-slate-700">{bug.expected}</p>
-                        </div>
-                      )}
-                      {bug.actual && (
-                        <div>
-                          <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Actual</p>
-                          <p className="text-xs text-slate-700">{bug.actual}</p>
-                        </div>
-                      )}
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <Select value={bug.status} onValueChange={(v) => onUpdateBug(bug.id, { status: v })}>
-                          <SelectTrigger className="h-7 w-32 text-[11px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="open">Open</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="fixed">Fixed</SelectItem>
-                            <SelectItem value="verified">Verified</SelectItem>
-                            <SelectItem value="wont_fix">Won't Fix</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Select value={bug.severity} onValueChange={(v) => onUpdateBug(bug.id, { severity: v })}>
-                          <SelectTrigger className="h-7 w-32 text-[11px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="blocker">Blocker</SelectItem>
-                            <SelectItem value="critical">Critical</SelectItem>
-                            <SelectItem value="major">Major</SelectItem>
-                            <SelectItem value="minor">Minor</SelectItem>
-                          </SelectContent>
-                        </Select>
+        {bugs.map((bug) => {
+          const reporter = bug.reporterRef;
+          const assignee = bug.assigneeRef;
+          return (
+            <Card key={bug.id} className="overflow-hidden">
+              <CardContent className="p-3.5">
+                <div className="flex items-start gap-3">
+                  <div className={`size-2 rounded-full mt-1.5 ${
+                    bug.severity === "blocker" ? "bg-rose-700" :
+                    bug.severity === "critical" ? "bg-rose-500" :
+                    bug.severity === "major" ? "bg-orange-500" :
+                    "bg-amber-400"
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-slate-900">{bug.title}</p>
+                        {bug.testCase && (
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Linked: {bug.testCase.title}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${BUG_SEVERITY_META[bug.severity].bg} ${BUG_SEVERITY_META[bug.severity].text}`}>
+                          {BUG_SEVERITY_META[bug.severity].label}
+                        </span>
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${BUG_STATUS_META[bug.status].bg} ${BUG_STATUS_META[bug.status].text}`}>
+                          {BUG_STATUS_META[bug.status].label}
+                        </span>
                       </div>
                     </div>
-                  )}
+                    {bug.description && (
+                      <p className="text-xs text-slate-600 mt-1.5 line-clamp-2">{bug.description}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-slate-500">
+                      {bug.moduleName && <span className="flex items-center gap-1"><Globe className="size-3" />{bug.moduleName}</span>}
+                      {reporter && (
+                        <span className="flex items-center gap-1">
+                          <Avatar className="size-4">
+                            <AvatarFallback className={`text-[8px] font-bold bg-gradient-to-br ${testerColor(reporter.color).gradient} text-white`}>
+                              {initials(reporter.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span>reported by <strong className="text-slate-700">{reporter.name}</strong></span>
+                        </span>
+                      )}
+                      {assignee && (
+                        <span className="flex items-center gap-1">
+                          <Avatar className="size-4">
+                            <AvatarFallback className={`text-[8px] font-bold bg-gradient-to-br ${testerColor(assignee.color).gradient} text-white`}>
+                              {initials(assignee.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span>assigned to <strong className="text-slate-700">{assignee.name}</strong></span>
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1"><Calendar className="size-3" />{new Date(bug.createdAt).toLocaleDateString()}</span>
+                      <button
+                        className="ml-auto text-emerald-600 hover:underline font-medium"
+                        onClick={() => setExpandedBug(expandedBug === bug.id ? null : bug.id)}
+                      >
+                        {expandedBug === bug.id ? "Hide" : "Details"}
+                      </button>
+                    </div>
+
+                    {expandedBug === bug.id && (
+                      <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                        {bug.stepsToRepro && (
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Steps to Reproduce</p>
+                            <p className="text-xs text-slate-700 bg-slate-50 rounded p-2 whitespace-pre-wrap">{bug.stepsToRepro}</p>
+                          </div>
+                        )}
+                        {bug.expected && (
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Expected</p>
+                            <p className="text-xs text-slate-700">{bug.expected}</p>
+                          </div>
+                        )}
+                        {bug.actual && (
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Actual</p>
+                            <p className="text-xs text-slate-700">{bug.actual}</p>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <Select value={bug.status} onValueChange={(v) => onUpdateBug(bug.id, { status: v })}>
+                            <SelectTrigger className="h-7 w-32 text-[11px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="open">Open</SelectItem>
+                              <SelectItem value="in_progress">In Progress</SelectItem>
+                              <SelectItem value="fixed">Fixed</SelectItem>
+                              <SelectItem value="verified">Verified</SelectItem>
+                              <SelectItem value="wont_fix">Won't Fix</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select value={bug.severity} onValueChange={(v) => onUpdateBug(bug.id, { severity: v })}>
+                            <SelectTrigger className="h-7 w-32 text-[11px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="blocker">Blocker</SelectItem>
+                              <SelectItem value="critical">Critical</SelectItem>
+                              <SelectItem value="major">Major</SelectItem>
+                              <SelectItem value="minor">Minor</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={bug.assigneeId ?? "none"}
+                            onValueChange={(v) => {
+                              const picked = v === "none" ? null : testers.find((t) => t.id === v);
+                              onUpdateBug(bug.id, {
+                                assigneeId: v === "none" ? null : v,
+                                assignee: picked?.name ?? null,
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-7 w-44 text-[11px]">
+                              <SelectValue placeholder="Assign to…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">— Unassigned —</SelectItem>
+                              {testers.map((t) => (
+                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {showNewBug && (
         <NewBugDialog
+          testers={testers}
+          currentTester={currentTester}
           onClose={() => setShowNewBug(false)}
           onCreate={(data) => {
             onCreateBug(data);
@@ -1290,13 +1741,22 @@ function BugsView({
   );
 }
 
-function NewBugDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (b: any) => void }) {
+function NewBugDialog({
+  testers, currentTester, onClose, onCreate,
+}: {
+  testers: TesterStat[];
+  currentTester: CurrentTester | null;
+  onClose: () => void;
+  onCreate: (b: any) => void;
+}) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState<BugSeverity>("major");
   const [priority, setPriority] = useState<Priority>("medium");
   const [moduleName, setModuleName] = useState("Landing Page");
-  const [reporter, setReporter] = useState("");
+  const [reporter, setReporter] = useState(currentTester?.name ?? "");
+  const [reporterId, setReporterId] = useState<string | "">(currentTester?.id ?? "");
+  const [assigneeId, setAssigneeId] = useState<string | "">("");
   const [steps, setSteps] = useState("");
   const [expected, setExpected] = useState("");
   const [actual, setActual] = useState("");
@@ -1359,9 +1819,44 @@ function NewBugDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (b
               </Select>
             </div>
             <div>
-              <Label className="text-xs">Reporter</Label>
-              <Input value={reporter} onChange={(e) => setReporter(e.target.value)} placeholder="Your name" className="mt-1" />
+              <Label className="text-xs flex items-center gap-1.5">
+                Reporter
+                {currentTester && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-medium">
+                    <span className={`size-1.5 rounded-full ${testerColor(currentTester.color).dot}`} />
+                    Auto: {currentTester.name}
+                  </span>
+                )}
+              </Label>
+              <Select
+                value={reporterId}
+                onValueChange={(v) => {
+                  setReporterId(v);
+                  const picked = testers.find((t) => t.id === v);
+                  setReporter(picked?.name ?? "");
+                }}
+              >
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Select reporter" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">— None —</SelectItem>
+                  {testers.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+          <div>
+            <Label className="text-xs">Assign to (optional)</Label>
+            <Select value={assigneeId} onValueChange={setAssigneeId}>
+              <SelectTrigger className="mt-1"><SelectValue placeholder="Leave unassigned" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">— Unassigned —</SelectItem>
+                {testers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label className="text-xs">Steps to Reproduce</Label>
@@ -1380,12 +1875,252 @@ function NewBugDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (b
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button disabled={!title} onClick={() => onCreate({ title, description, severity, priority, moduleName, reporter, stepsToRepro: steps, expected, actual })} className="bg-rose-600 hover:bg-rose-700">
+          <Button
+            disabled={!title}
+            onClick={() => onCreate({
+              title, description, severity, priority, moduleName,
+              reporter: reporter || undefined,
+              reporterId: reporterId || undefined,
+              assigneeId: assigneeId || undefined,
+              assignee: testers.find((t) => t.id === assigneeId)?.name,
+              stepsToRepro: steps, expected, actual,
+            })}
+            className="bg-rose-600 hover:bg-rose-700"
+          >
             Create bug
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ---------------- Testers View ---------------- */
+function TestersView({
+  testers, onRefresh, onPickTester, onToggleActive,
+}: {
+  testers: TesterStat[];
+  onRefresh: () => void;
+  onPickTester: (t: TesterStat) => void;
+  onToggleActive: (id: string, active: boolean) => void;
+}) {
+  const [selectedTesterId, setSelectedTesterId] = useState<string | null>(null);
+  const selectedTester = testers.find((t) => t.id === selectedTesterId);
+
+  const sortedTesters = [...testers].sort((a, b) => b.stats.totalExecutions - a.stats.totalExecutions);
+  const totalExecutions = testers.reduce((sum, t) => sum + t.stats.totalExecutions, 0);
+  const totalBugsReported = testers.reduce((sum, t) => sum + t.stats.bugsReported, 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Testers</h2>
+          <p className="text-sm text-slate-500">
+            {testers.length} testers · {totalExecutions} total executions · {totalBugsReported} bugs reported
+          </p>
+        </div>
+        <Button size="sm" variant="outline" onClick={onRefresh}>
+          <RefreshCw className="size-3.5 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      {/* Tester roster grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {sortedTesters.map((t) => {
+          const colorCls = testerColor(t.color);
+          const RoleIcon = TESTER_ROLE_META[t.role]?.icon ?? User;
+          const isExpanded = selectedTesterId === t.id;
+          return (
+            <Card
+              key={t.id}
+              className={`overflow-hidden transition-all cursor-pointer ${isExpanded ? "ring-2 ring-emerald-400" : "hover:shadow-md"}`}
+              onClick={() => setSelectedTesterId(isExpanded ? null : t.id)}
+            >
+              <CardContent className="p-3.5">
+                <div className="flex items-start gap-3">
+                  <Avatar className="size-11">
+                    <AvatarFallback className={`text-sm font-bold bg-gradient-to-br ${colorCls.gradient} text-white`}>
+                      {initials(t.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-semibold text-sm text-slate-900 truncate">{t.name}</p>
+                      {!t.active && (
+                        <span className="text-[9px] text-slate-500 bg-slate-100 rounded px-1 py-0.5">inactive</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
+                      <RoleIcon className="size-3" />
+                      <span>{TESTER_ROLE_META[t.role]?.label ?? "Tester"}</span>
+                      {t.email && (
+                        <>
+                          <span>·</span>
+                          <Mail className="size-2.5" />
+                          <span className="truncate">{t.email}</span>
+                        </>
+                      )}
+                    </div>
+                    {t.stats.lastActive && (
+                      <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
+                        <Clock className="size-2.5" />
+                        Last active {new Date(t.stats.lastActive).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick stats */}
+                <div className="grid grid-cols-4 gap-1 mt-3 text-center text-[11px]">
+                  <div className="rounded bg-slate-50 py-1.5">
+                    <div className="font-bold text-slate-900 text-sm">{t.stats.totalExecutions}</div>
+                    <div className="text-slate-500">Runs</div>
+                  </div>
+                  <div className="rounded bg-emerald-50 py-1.5">
+                    <div className="font-bold text-emerald-700 text-sm">{t.stats.pass}</div>
+                    <div className="text-slate-500">Pass</div>
+                  </div>
+                  <div className="rounded bg-rose-50 py-1.5">
+                    <div className="font-bold text-rose-700 text-sm">{t.stats.fail}</div>
+                    <div className="text-slate-500">Fail</div>
+                  </div>
+                  <div className="rounded bg-amber-50 py-1.5">
+                    <div className="font-bold text-amber-700 text-sm">{t.stats.bugsReported}</div>
+                    <div className="text-slate-500">Bugs</div>
+                  </div>
+                </div>
+
+                {t.stats.totalExecutions > 0 && (
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                      <span>Pass rate</span>
+                      <span className="font-semibold">{t.stats.passRate}%</span>
+                    </div>
+                    <Progress value={t.stats.passRate} className="h-1" />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1.5 mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs flex-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPickTester(t);
+                    }}
+                  >
+                    Set as current
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs px-2"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleActive(t.id, !t.active);
+                    }}
+                  >
+                    {t.active ? "Deactivate" : "Activate"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Drill-down: per-tester activity */}
+      {selectedTester && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              <Avatar className="size-10">
+                <AvatarFallback className={`text-sm font-bold bg-gradient-to-br ${testerColor(selectedTester.color).gradient} text-white`}>
+                  {initials(selectedTester.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <CardTitle className="text-base">{selectedTester.name}</CardTitle>
+                <CardDescription className="text-xs">
+                  {TESTER_ROLE_META[selectedTester.role]?.label ?? "Tester"}
+                  {selectedTester.email && ` · ${selectedTester.email}`}
+                  {" · "}Active in {selectedTester.stats.modulesTouched} module{selectedTester.stats.modulesTouched === 1 ? "" : "s"}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Recent executions */}
+              <div>
+                <h4 className="text-[11px] uppercase font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
+                  <ListChecks className="size-3" />
+                  Recent Executions ({selectedTester.recentExecutions.length})
+                </h4>
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                  {selectedTester.recentExecutions.length === 0 && (
+                    <div className="text-xs text-slate-400 italic py-3 text-center">No executions yet.</div>
+                  )}
+                  {selectedTester.recentExecutions.map((e) => (
+                    <div key={e.id} className="border border-slate-100 rounded p-2 text-xs">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <StatusBadge status={e.status as TestStatus} />
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(e.executedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="font-medium text-slate-900 line-clamp-1 text-[11px]">{e.testCase.title}</div>
+                      <div className="text-[10px] text-slate-500">{e.testCase.module}</div>
+                      {e.notes && <div className="text-[10px] text-slate-500 italic mt-0.5">"{e.notes}"</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recent bugs */}
+              <div>
+                <h4 className="text-[11px] uppercase font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
+                  <BugIcon className="size-3" />
+                  Recently Reported Bugs ({selectedTester.recentBugs.length})
+                </h4>
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                  {selectedTester.recentBugs.length === 0 && (
+                    <div className="text-xs text-slate-400 italic py-3 text-center">No bugs reported.</div>
+                  )}
+                  {selectedTester.recentBugs.map((b) => (
+                    <div key={b.id} className="border border-slate-100 rounded p-2 text-xs">
+                      <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ${BUG_SEVERITY_META[b.severity as BugSeverity]?.bg ?? "bg-slate-100"} ${BUG_SEVERITY_META[b.severity as BugSeverity]?.text ?? "text-slate-700"}`}>
+                          {BUG_SEVERITY_META[b.severity as BugSeverity]?.label ?? b.severity}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(b.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="font-medium text-slate-900 line-clamp-1 text-[11px]">{b.title}</div>
+                      <div className="text-[10px] text-slate-500">
+                        Status: {BUG_STATUS_META[b.status as BugStatus]?.label ?? b.status}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {testers.length === 0 && (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-slate-400">
+            <Users className="size-8 mx-auto mb-2 text-slate-300" />
+            No testers yet. Click the tester selector in the header to add one.
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 

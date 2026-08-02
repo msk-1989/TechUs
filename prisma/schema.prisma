@@ -31,6 +31,20 @@ model TestSuite {
   createdAt   DateTime   @default(now())
 }
 
+model Tester {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  email       String?
+  role        String          @default("tester") // tester | lead | admin
+  color       String          @default("emerald") // tailwind color name
+  active      Boolean         @default(true)
+  executions  TestExecution[]
+  reportedBugs  Bug[]         @relation("BugReporter")
+  assignedBugs  Bug[]         @relation("BugAssignee")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
 model TestCase {
   id            String          @id @default(cuid())
   suiteId       String
@@ -58,6 +72,8 @@ model TestExecution {
   status      String   // pass | fail | blocked | skipped
   notes       String?
   executedBy  String?
+  testerId    String?
+  tester      Tester?  @relation(fields: [testerId], references: [id], onDelete: SetNull)
   executedAt  DateTime @default(now())
 }
 
@@ -72,7 +88,11 @@ model Bug {
   status       String    @default("open") // open | in_progress | fixed | verified | wont_fix
   moduleName   String?
   reporter     String?
+  reporterId   String?
+  reporterRef  Tester?   @relation("BugReporter", fields: [reporterId], references: [id], onDelete: SetNull)
   assignee     String?
+  assigneeId   String?
+  assigneeRef  Tester?   @relation("BugAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   stepsToRepro String?
   expected     String?
   actual       String?

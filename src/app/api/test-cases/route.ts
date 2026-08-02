@@ -6,6 +6,7 @@ export async function GET(req: NextRequest) {
   const moduleId = req.nextUrl.searchParams.get("moduleId");
   const priority = req.nextUrl.searchParams.get("priority");
   const category = req.nextUrl.searchParams.get("category");
+  const testerId = req.nextUrl.searchParams.get("testerId");
   const search = req.nextUrl.searchParams.get("search");
 
   const where: Record<string, unknown> = {};
@@ -14,6 +15,17 @@ export async function GET(req: NextRequest) {
   if (category && category !== "all") where.category = category;
   if (moduleId && moduleId !== "all") {
     where.suite = { moduleId };
+  }
+  if (testerId && testerId !== "all") {
+    if (testerId === "any") {
+      // tests that have at least one execution
+      where.executions = { some: {} };
+    } else if (testerId === "none") {
+      // tests that have no executions yet
+      where.executions = { none: {} };
+    } else {
+      where.executions = { some: { testerId } };
+    }
   }
   if (search) {
     where.OR = [
@@ -30,6 +42,7 @@ export async function GET(req: NextRequest) {
       executions: {
         orderBy: { executedAt: "desc" },
         take: 1,
+        include: { tester: true },
       },
     },
     orderBy: { createdAt: "asc" },
@@ -40,7 +53,7 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const { id, status, notes, testerName, createExecution } = body;
+  const { id, status, notes, testerName, testerId, createExecution } = body;
 
   if (!id || !status) {
     return NextResponse.json({ error: "Missing id or status" }, { status: 400 });
@@ -64,6 +77,7 @@ export async function PATCH(req: NextRequest) {
         status,
         notes: notes ?? null,
         executedBy: testerName ?? null,
+        testerId: testerId || null,
       },
     });
   }
