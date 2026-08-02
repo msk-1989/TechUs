@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { createAuditLog } from "@/lib/audit";
 
 export async function GET() {
   const testers = await db.tester.findMany({
@@ -84,6 +87,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const body = await req.json();
   const { name, email, role, color } = body;
 
@@ -91,13 +98,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Name required" }, { status: 400 });
   }
 
+  // Create a corresponding User account, then the Tester profile
+  const userId = (session.user as any).id;
+  // Reuse current user if no email provided, else create a new user (auto-generated password)
+  let linkedUserId = userId;
+  if (email && email !== (session.user as any).email) {
+    const bcrypt = (await import("bcryptjs")).default;
+    const tempPassword = await bcrypt.hash(Math.random().toString(36).slice(2) + "TechUs1!", 12);
+    const newUser = await db.user.create({
+      data: {
+        name,
+        email: email.toLowerCase(),
+        passwordHash: tempPassword,
+        role: role ?? "tester",
+        emailVerified: new Date(),
+      },
+    });
+    linkedUserId = newUser.id;
+  }
+
   const tester = await db.tester.create({
     data: {
+      userId: linkedUserId,
       name,
       email,
       role: role ?? "tester",
       color: color ?? "emerald",
     },
+  });
+
+  await createAuditLog({
+    userId,
+    action: "tester.create",
+    entityType: "Tester",
+    entityId: tester.id,
+    details: `Added tester: ${name}`,
   });
 
   return NextResponse.json({ tester });

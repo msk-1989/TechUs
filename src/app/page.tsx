@@ -89,6 +89,8 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useSession, signOut } from "next-auth/react";
+import { AuthGate } from "@/components/auth-gate";
 
 const TESTER_ROLE_META: Record<string, { label: string; icon: typeof Crown }> = {
   lead:   { label: "QA Lead",     icon: Crown },
@@ -120,6 +122,15 @@ const STATUS_COLORS_PIE: Record<TestStatus, string> = {
 };
 
 export default function HomePage() {
+  return (
+    <AuthGate>
+      <AppContent />
+    </AuthGate>
+  );
+}
+
+function AppContent() {
+  const { data: session } = useSession();
   const [view, setView] = useState<ViewKey>("dashboard");
   const [stats, setStats] = useState<any>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
@@ -181,6 +192,23 @@ export default function HomePage() {
     refreshBugs();
     refreshTesters();
   }, [refreshStats, refreshTestCases, refreshBugs, refreshTesters]);
+
+  // Auto-set current tester from session user
+  useEffect(() => {
+    if (session?.user && !currentTester) {
+      const u = session.user as any;
+      // Find the tester matching this user
+      const matching = testers.find((t) => t.email === u.email || t.name === u.name);
+      if (matching) {
+        setCurrentTester({
+          id: matching.id,
+          name: matching.name,
+          role: matching.role,
+          color: matching.color,
+        });
+      }
+    }
+  }, [session, testers, currentTester, setCurrentTester]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -376,9 +404,9 @@ function Header({
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight text-slate-900 leading-tight">
-              Hidayah Connect <span className="text-emerald-600">×</span> TeachUs
+              TechUs <span className="text-emerald-600 font-semibold">QA</span>
             </h1>
-            <p className="text-[11px] text-slate-500 leading-tight">Testing Reporting System</p>
+            <p className="text-[11px] text-slate-500 leading-tight">Hidayah Connect × TeachUs — Reporting</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -480,6 +508,8 @@ function Header({
             <Calendar className="size-3 mr-1" />
             {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
           </Badge>
+          <NotificationBell />
+          <UserMenu />
         </div>
       </div>
 
@@ -548,6 +578,142 @@ function Header({
         </Dialog>
       )}
     </header>
+  );
+}
+
+/* ---------------- Notification Bell ---------------- */
+function NotificationBell() {
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const doRefresh = async () => {
+      try {
+        const res = await fetch("/api/notifications");
+        const data = await res.json();
+        if (!mounted) return;
+        setNotifications(data.notifications || []);
+        setUnread(data.unreadCount || 0);
+      } catch {}
+    };
+    doRefresh();
+    const i = setInterval(doRefresh, 30000);
+    return () => { mounted = false; clearInterval(i); };
+  }, []);
+
+  const markAllRead = async () => {
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markAllRead: true }),
+    });
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnread(0);
+  };
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-9 w-9 p-0 relative">
+          <Bell className="size-4" />
+          {unread > 0 && (
+            <span className="absolute -top-1 -right-1 size-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-80 p-0">
+        <div className="flex items-center justify-between p-3 border-b border-slate-100">
+          <span className="text-xs font-semibold text-slate-700">
+            Notifications {unread > 0 && <span className="text-rose-600">({unread} new)</span>}
+          </span>
+          {unread > 0 && (
+            <button
+              onClick={markAllRead}
+              className="text-[10px] text-emerald-600 hover:text-emerald-700 font-medium"
+            >
+              Mark all read
+            </button>
+          )}
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {notifications.length === 0 ? (
+            <div className="p-6 text-center text-xs text-slate-400">
+              <Bell className="size-6 mx-auto mb-2 text-slate-300" />
+              No notifications yet
+            </div>
+          ) : (
+            notifications.map((n) => (
+              <div
+                key={n.id}
+                className={`p-2.5 border-b border-slate-50 text-xs ${!n.read ? "bg-emerald-50/50" : ""}`}
+              >
+                <div className="font-medium text-slate-900">{n.title}</div>
+                {n.body && <div className="text-slate-600 mt-0.5">{n.body}</div>}
+                <div className="text-[10px] text-slate-400 mt-1">
+                  {new Date(n.createdAt).toLocaleString()}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/* ---------------- User Menu ---------------- */
+function UserMenu() {
+  const { data: session } = useSession();
+  if (!session?.user) return null;
+  const user = session.user as any;
+  const name = user.name || user.email || "User";
+  const role = user.role || "tester";
+  const RoleIcon = TESTER_ROLE_META[role]?.icon ?? User;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-9 gap-2 px-2">
+          <Avatar className="size-7">
+            <AvatarFallback className="text-[10px] font-bold bg-gradient-to-br from-slate-600 to-slate-800 text-white">
+              {initials(name)}
+            </AvatarFallback>
+          </Avatar>
+          <ChevronDown className="size-3 text-slate-400" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <div className="px-3 py-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Avatar className="size-8">
+              <AvatarFallback className="text-[11px] font-bold bg-gradient-to-br from-slate-600 to-slate-800 text-white">
+                {initials(name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-slate-900 truncate">{name}</div>
+              <div className="text-[10px] text-slate-500 truncate">{user.email}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-500">
+            <RoleIcon className="size-2.5" />
+            {TESTER_ROLE_META[role]?.label ?? role}
+          </div>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="gap-2 text-rose-600"
+        >
+          <XCircle className="size-4" />
+          <span className="text-xs font-medium">Sign out</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -1065,10 +1231,15 @@ function TestCasesView({
               <Button
                 size="sm"
                 variant={filters.decisionNeeded === "true" ? "default" : "outline"}
-                onClick={() => setFilters((f) => ({
-                  ...f,
-                  decisionNeeded: f.decisionNeeded === "true" ? undefined : "true",
-                }))}
+                onClick={() => setFilters((f) => {
+                  const next = { ...f };
+                  if (next.decisionNeeded === "true") {
+                    delete next.decisionNeeded;
+                  } else {
+                    next.decisionNeeded = "true";
+                  }
+                  return next;
+                })}
                 className={filters.decisionNeeded === "true" ? "bg-amber-500 hover:bg-amber-600 text-white" : "border-amber-300 text-amber-700 hover:bg-amber-50"}
               >
                 <AlertTriangle className="size-3.5 mr-1.5" />

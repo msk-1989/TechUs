@@ -52,3 +52,23 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Environment variables (NEVER commit)
+.env
+.env.local
+.env.production
+
+# Database
+db/
+*.db
+*.db-journal
+
+# Logs
+*.log
+dev.log
+server.log
+
+# Z scripts
+.zscripts/
+
+# Uploads (transient)
+upload/

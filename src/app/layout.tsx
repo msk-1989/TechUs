@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { Providers } from "@/components/providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,17 +15,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Hidayah Connect × TeachUs — Testing Reporting System",
-  description: "Internal QA reporting dashboard for the Hidayah Connect & TeachUs platform. Track 345 test cases across 7 modules, log bugs, and generate coverage reports.",
-  keywords: ["QA", "testing", "Hidayah", "TeachUs", "test reporting", "bug tracker", "test cases"],
-  authors: [{ name: "Hidayah Connect & TeachUs QA Team" }],
+  title: "TechUs — QA Reporting System",
+  description: "Production-grade QA reporting platform for Hidayah Connect & TeachUs. Track 506+ test cases across 12 modules, manage testers, log bugs, and audit every action.",
+  keywords: ["QA", "testing", "TechUs", "Hidayah", "TeachUs", "test reporting", "bug tracker", "audit log"],
+  authors: [{ name: "TechUs Team" }],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
   openGraph: {
-    title: "Hidayah Connect × TeachUs — Testing Reporting System",
-    description: "Track test execution, log bugs, and report QA progress across 7 platform modules.",
-    siteName: "Hidayah Connect & TeachUs",
+    title: "TechUs — QA Reporting System",
+    description: "Track test execution, log bugs, audit every action across 12 platform modules.",
+    siteName: "TechUs",
     type: "website",
   },
 };
@@ -39,8 +40,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        {children}
-        <Toaster />
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );
