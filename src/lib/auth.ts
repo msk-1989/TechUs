@@ -2,22 +2,23 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { getNextauthSecret, getNextauthUrl, getEnvStatus } from "@/lib/env-config";
 
-// Fallback secret — ONLY used if NEXTAUTH_SECRET env var is missing.
-// This allows the app to boot without crashing, but sessions will be
-// invalidated on every redeploy. ALWAYS set NEXTAUTH_SECRET in production.
-const FALLBACK_SECRET =
-  process.env.NEXTAUTH_SECRET ??
-  "techus-dev-fallback-secret-do-not-use-in-production-please-set-NEXTAUTH_SECRET-env-var";
+const AUTH_SECRET = getNextauthSecret();
+const AUTH_URL = getNextauthUrl();
 
-if (!process.env.NEXTAUTH_SECRET && process.env.NODE_ENV === "production") {
-  console.error(
-    "⚠️  NEXTAUTH_SECRET is NOT set! Using fallback secret — sessions will break on every redeploy."
-  );
-}
+// Set env vars for NextAuth to pick up (in case they're missing on Vercel)
+if (!process.env.NEXTAUTH_SECRET) process.env.NEXTAUTH_SECRET = AUTH_SECRET;
+if (!process.env.NEXTAUTH_URL) process.env.NEXTAUTH_URL = AUTH_URL;
 
-if (!process.env.DATABASE_URL) {
-  console.error("⚠️  DATABASE_URL is NOT set! The app cannot connect to PostgreSQL.");
+if (process.env.NODE_ENV === "production") {
+  const status = getEnvStatus();
+  if (status.using_fallback_database) {
+    console.warn("⚠️  Using FALLBACK DATABASE_URL (hardcoded in env-config.ts). Set DATABASE_URL on Vercel and remove the fallback.");
+  }
+  if (status.using_fallback_secret) {
+    console.warn("⚠️  Using FALLBACK NEXTAUTH_SECRET (hardcoded in env-config.ts). Set NEXTAUTH_SECRET on Vercel and remove the fallback.");
+  }
 }
 
 export const authOptions: NextAuthOptions = {
@@ -72,7 +73,5 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
-  secret: FALLBACK_SECRET,
-  // Allow the deployed Vercel URL without needing to set NEXTAUTH_URL explicitly
-  // NextAuth v4 will auto-detect the URL from headers in production
+  secret: AUTH_SECRET,
 };

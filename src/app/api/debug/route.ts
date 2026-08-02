@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getEnvStatus } from "@/lib/env-config";
 
 // Debug endpoint — TEMPORARY. Remove after troubleshooting is complete.
-// Exposes env var STATUS (not values) and DB connection test.
 
 export async function GET() {
-  const hasDatabaseUrl = !!process.env.DATABASE_URL;
-  const hasNextauthSecret = !!process.env.NEXTAUTH_SECRET;
-  const hasNextauthUrl = !!process.env.NEXTAUTH_URL;
-  const databaseUrlProtocol = process.env.DATABASE_URL?.split("://")[0] ?? "missing";
-  const databaseUrlHost = process.env.DATABASE_URL?.split("@")[1]?.split("/")[0]?.replace(":pooler", "") ?? "missing";
+  const status = getEnvStatus();
 
   let dbConnection: string = "not_tested";
   let dbError: string | null = null;
@@ -32,35 +28,35 @@ export async function GET() {
     dbError = e.message?.slice(0, 300) ?? "unknown";
   }
 
-  const allSet = hasDatabaseUrl && hasNextauthSecret && hasNextauthUrl;
-  const diagnosis = !hasDatabaseUrl
-    ? "❌ DATABASE_URL is NOT set on Vercel. The app cannot connect to PostgreSQL. Add it in Vercel → Settings → Environment Variables."
-    : !hasNextauthSecret
-    ? "❌ NEXTAUTH_SECRET is NOT set on Vercel. Sessions can't be signed. Generate one with `openssl rand -base64 32` and add to Vercel env vars."
-    : !hasNextauthUrl
-    ? "⚠️ NEXTAUTH_URL is NOT set. Set it to https://tech-us-seven.vercel.app"
-    : dbConnection === "failed"
-    ? `❌ Database connection failed: ${dbError}`
-    : userCount === 0
-    ? "❌ Database connected but NO users found. Run the seed: DATABASE_URL='<your_url>' bun run scripts/seed.ts"
-    : !adminExists
-    ? "❌ admin@techus.app user not found in DB. Run the seed script."
-    : passwordValid === false
-    ? "❌ admin@techus.app exists but password 'admin123' does NOT match. Re-seed the database."
-    : "✅ All env vars set, DB connected, admin user exists with valid password. Login should work with admin@techus.app / admin123";
+  const allSet = status.DATABASE_URL_set && status.NEXTAUTH_SECRET_set && status.NEXTAUTH_URL_set;
+  const usingFallback = status.using_fallback_database || status.using_fallback_secret;
+
+  let diagnosis: string;
+  if (dbConnection === "failed") {
+    diagnosis = `❌ DB connection failed: ${dbError}`;
+  } else if (userCount === 0) {
+    diagnosis = "❌ DB connected but NO users. Run seed: bun run scripts/seed.ts";
+  } else if (!adminExists) {
+    diagnosis = "❌ admin@techus.app not found in DB. Re-seed the database.";
+  } else if (passwordValid === false) {
+    diagnosis = "❌ admin@techus.app exists but password 'admin123' does NOT match.";
+  } else if (usingFallback) {
+    diagnosis = "✅ App is WORKING using hardcoded fallback env values. Login should succeed with admin@techus.app / admin123. (Recommend setting proper env vars on Vercel and removing env-config.ts fallback.)";
+  } else {
+    diagnosis = "✅ All env vars set on Vercel, DB connected, admin user valid. Login with admin@techus.app / admin123";
+  }
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
     vercel_url: "https://tech-us-seven.vercel.app",
     environment: {
       NODE_ENV: process.env.NODE_ENV ?? "unset",
-      DATABASE_URL_set: hasDatabaseUrl,
-      DATABASE_URL_protocol: databaseUrlProtocol,
-      DATABASE_URL_host: databaseUrlHost,
-      NEXTAUTH_SECRET_set: hasNextauthSecret,
-      NEXTAUTH_SECRET_length: process.env.NEXTAUTH_SECRET?.length ?? 0,
-      NEXTAUTH_URL_set: hasNextauthUrl,
-      NEXTAUTH_URL_value: process.env.NEXTAUTH_URL ?? "missing",
+      DATABASE_URL_set: status.DATABASE_URL_set,
+      NEXTAUTH_SECRET_set: status.NEXTAUTH_SECRET_set,
+      NEXTAUTH_URL_set: status.NEXTAUTH_URL_set,
+      using_fallback_database: status.using_fallback_database,
+      using_fallback_secret: status.using_fallback_secret,
+      using_fallback_url: status.using_fallback_url,
     },
     database: {
       connection: dbConnection,
@@ -70,16 +66,13 @@ export async function GET() {
       adminPasswordValid: passwordValid,
     },
     allEnvVarsSet: allSet,
+    using_any_fallback: usingFallback,
     diagnosis,
-    next_steps_if_failing: [
-      "1. Go to https://vercel.com/msk-1989/tech-us/settings/environment-variables",
-      "2. Add DATABASE_URL = postgresql://neondb_owner:npg_kHe7iYy1GlFW@ep-hidden-rice-aytmzy3n-pooler.c-5.us-east-2.aws.neon.tech/neondb?sslmode=require",
-      "3. Add NEXTAUTH_SECRET = K7xH9mP3qR8sT2vW5yZ6aB4cD8eF1gH2jK3lM5nO7pQ9rS1tU3vW5xY7zA0bC2dE4=",
-      "4. Add NEXTAUTH_URL = https://tech-us-seven.vercel.app",
-      "5. ⚠️ For EACH variable, set Environment = 'Production' (not just Preview/Development)",
-      "6. After all 3 added, go to Deployments tab → click ⋮ on latest → Redeploy",
-      "7. Wait 2 minutes, then refresh this /api/debug endpoint",
-      "8. When allEnvVarsSet = true and diagnosis says ✅, login will work",
-    ],
+    login_test_url: "https://tech-us-seven.vercel.app/api/auth/test-login?email=admin@techus.app&password=admin123",
+    login_url: "https://tech-us-seven.vercel.app",
+    credentials: {
+      admin_email: "admin@techus.app",
+      admin_password: "admin123",
+    },
   }, { status: 200 });
 }
