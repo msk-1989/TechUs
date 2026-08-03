@@ -29,6 +29,7 @@ model User {
   tester        Tester?
   auditLogs     AuditLog[]
   notifications Notification[]
+  attachments   BugAttachment[]
 }
 
 model Account {
@@ -170,6 +171,26 @@ model Bug {
   actual        String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  attachments   BugAttachment[]
+}
+
+// ============ Bug Attachments (screenshots, recordings, voice notes) ============
+
+model BugAttachment {
+  id            String   @id @default(cuid())
+  bugId         String
+  bug           Bug      @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  fileName      String
+  fileType      String   // image | video | audio
+  mimeType      String
+  fileSize      Int      // in bytes
+  fileData      String   // base64-encoded file content
+  uploadedById  String?
+  uploadedBy    User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  @@index([bugId])
+  @@index([createdAt])
 }
 
 // ============ NEW: Test Run Sessions ============

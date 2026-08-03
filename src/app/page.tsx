@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -52,6 +52,12 @@ import {
   Wrench,
   PlayCircle,
   UserCog,
+  Paperclip,
+  Upload,
+  Mic,
+  Video,
+  Square,
+  Loader2,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -2171,6 +2177,8 @@ function BugsView({
                             </SelectContent>
                           </Select>
                         </div>
+                        {/* Attachments section */}
+                        <BugAttachments bugId={bug.id} />
                       </div>
                     )}
                   </div>
@@ -4074,5 +4082,348 @@ function DeleteUserDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ---------------- Bug Attachments (screenshots, recordings, voice notes) ---------------- */
+function BugAttachments({ bugId }: { bugId: string }) {
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"upload" | "record">("upload");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<any | null>(null);
+  const { toast } = useToast();
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/bugs/${bugId}/attachments`);
+      const data = await res.json();
+      setAttachments(data.attachments || []);
+    } catch {
+      setAttachments([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [bugId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      const res = await fetch(`/api/bugs/${bugId}/attachments`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
+      }
+      toast({ title: "Attachment uploaded", description: `${file.name} (${(file.size / 1024).toFixed(0)}KB)` });
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (attachmentId: string) => {
+    try {
+      await fetch(`/api/attachments/${attachmentId}`, { method: "DELETE" });
+      toast({ title: "Attachment deleted" });
+      refresh();
+    } catch {
+      toast({ title: "Delete failed", variant: "destructive" });
+    }
+  };
+
+  // Voice note recording using MediaRecorder API
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const file = new File([audioBlob], `voice-note-${Date.now()}.webm`, { type: "audio/webm" });
+        await handleFileUpload(file);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordingTime(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime((t) => t + 1);
+      }, 1000);
+    } catch (e: any) {
+      toast({ title: "Microphone access denied", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+  };
+
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
+
+  const openPreview = async (attachment: any) => {
+    const url = `/api/attachments/${attachment.id}`;
+    setPreviewUrl(url);
+    setPreviewAttachment(attachment);
+  };
+
+  const images = attachments.filter((a) => a.fileType === "image");
+  const videos = attachments.filter((a) => a.fileType === "video");
+  const audios = attachments.filter((a) => a.fileType === "audio");
+
+  return (
+    <div className="mt-3 border-t border-slate-100 pt-3">
+      <h5 className="text-[10px] uppercase font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
+        <Paperclip className="size-3" />
+        Attachments ({attachments.length})
+      </h5>
+
+      {/* Tabs: Upload File | Record Voice Note */}
+      <div className="flex gap-1 mb-2">
+        <button
+          onClick={() => setActiveTab("upload")}
+          className={`px-3 py-1.5 rounded text-[11px] font-medium transition ${
+            activeTab === "upload" ? "bg-emerald-100 text-emerald-700" : "text-slate-500 hover:bg-slate-100"
+          }`}
+        >
+          <Upload className="size-3 inline mr-1" /> Upload File
+        </button>
+        <button
+          onClick={() => setActiveTab("record")}
+          className={`px-3 py-1.5 rounded text-[11px] font-medium transition ${
+            activeTab === "record" ? "bg-rose-100 text-rose-700" : "text-slate-500 hover:bg-slate-100"
+          }`}
+        >
+          <Mic className="size-3 inline mr-1" /> Record Voice Note
+        </button>
+      </div>
+
+      {/* Upload tab */}
+      {activeTab === "upload" && (
+        <div className="space-y-2">
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/30 transition"
+          >
+            {uploading ? (
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
+                <Loader2 className="size-4 animate-spin" /> Uploading…
+              </div>
+            ) : (
+              <>
+                <Upload className="size-6 mx-auto text-slate-400 mb-1" />
+                <p className="text-xs text-slate-600 font-medium">Click to upload</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  Screenshots (PNG/JPG, max 3MB) · Screen recordings (MP4/WebM, max 8MB) · Audio (MP3/WAV, max 2MB)
+                </p>
+              </>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*,audio/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileUpload(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      )}
+
+      {/* Record tab */}
+      {activeTab === "record" && (
+        <div className="border-2 border-dashed border-rose-200 rounded-lg p-4 text-center bg-rose-50/20">
+          {isRecording ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-center gap-2">
+                <span className="size-2.5 rounded-full bg-rose-500 animate-pulse" />
+                <span className="text-xs font-mono text-rose-700">{formatTime(recordingTime)}</span>
+              </div>
+              <p className="text-[10px] text-slate-500">Recording… Speak clearly into your microphone</p>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={stopRecording}
+                className="h-7 text-xs"
+              >
+                <Square className="size-3 mr-1" /> Stop & Upload
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Mic className="size-6 mx-auto text-rose-400" />
+              <p className="text-xs text-slate-600 font-medium">Record a voice note explaining the bug</p>
+              <p className="text-[10px] text-slate-400">Max ~2 minutes · Browser will request microphone access</p>
+              <Button
+                size="sm"
+                onClick={startRecording}
+                className="h-7 text-xs bg-rose-600 hover:bg-rose-700"
+              >
+                <Mic className="size-3 mr-1" /> Start Recording
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Existing attachments */}
+      {loading ? (
+        <p className="text-[10px] text-slate-400 mt-2">Loading attachments…</p>
+      ) : attachments.length === 0 ? (
+        <p className="text-[10px] text-slate-400 mt-2 italic">No attachments yet</p>
+      ) : (
+        <div className="space-y-2 mt-2">
+          {/* Images */}
+          {images.length > 0 && (
+            <div>
+              <p className="text-[9px] uppercase text-slate-400 font-semibold mb-1">Screenshots ({images.length})</p>
+              <div className="flex gap-2 flex-wrap">
+                {images.map((a) => (
+                  <div key={a.id} className="relative group">
+                    <img
+                      src={`/api/attachments/${a.id}`}
+                      alt={a.fileName}
+                      className="size-16 object-cover rounded border border-slate-200 cursor-pointer hover:border-emerald-400"
+                      onClick={() => openPreview(a)}
+                    />
+                    <button
+                      onClick={() => handleDelete(a.id)}
+                      className="absolute -top-1 -right-1 size-4 rounded-full bg-rose-500 text-white text-[8px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Videos */}
+          {videos.length > 0 && (
+            <div>
+              <p className="text-[9px] uppercase text-slate-400 font-semibold mb-1">Screen Recordings ({videos.length})</p>
+              <div className="space-y-1">
+                {videos.map((a) => (
+                  <div key={a.id} className="flex items-center gap-2 p-1.5 rounded border border-slate-100 hover:bg-slate-50">
+                    <Video className="size-3.5 text-slate-400 shrink-0" />
+                    <span className="text-[11px] text-slate-700 truncate flex-1">{a.fileName}</span>
+                    <span className="text-[10px] text-slate-400">{formatSize(a.fileSize)}</span>
+                    <button
+                      onClick={() => openPreview(a)}
+                      className="text-emerald-600 hover:text-emerald-700 text-[10px] font-medium"
+                    >
+                      <PlayCircle className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(a.id)}
+                      className="text-rose-500 hover:text-rose-700"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Audio */}
+          {audios.length > 0 && (
+            <div>
+              <p className="text-[9px] uppercase text-slate-400 font-semibold mb-1">Voice Notes ({audios.length})</p>
+              <div className="space-y-1">
+                {audios.map((a) => (
+                  <div key={a.id} className="flex items-center gap-2 p-1.5 rounded border border-slate-100 hover:bg-slate-50">
+                    <Mic className="size-3.5 text-rose-400 shrink-0" />
+                    <span className="text-[11px] text-slate-700 truncate flex-1">{a.fileName}</span>
+                    <span className="text-[10px] text-slate-400">{formatSize(a.fileSize)}</span>
+                    <button
+                      onClick={() => openPreview(a)}
+                      className="text-emerald-600 hover:text-emerald-700 text-[10px] font-medium"
+                    >
+                      <PlayCircle className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(a.id)}
+                      className="text-rose-500 hover:text-rose-700"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Preview modal */}
+      {previewUrl && previewAttachment && (
+        <Dialog open onOpenChange={() => { setPreviewUrl(null); setPreviewAttachment(null); }}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle className="text-sm flex items-center justify-between">
+                <span>{previewAttachment.fileName}</span>
+                <span className="text-[10px] text-slate-400">{formatSize(previewAttachment.fileSize)} · {previewAttachment.uploadedBy}</span>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex items-center justify-center bg-slate-50 rounded-lg overflow-hidden" style={{ maxHeight: "70vh" }}>
+              {previewAttachment.fileType === "image" && (
+                <img src={previewUrl} alt={previewAttachment.fileName} className="max-w-full max-h-[70vh] object-contain" />
+              )}
+              {previewAttachment.fileType === "video" && (
+                <video src={previewUrl} controls className="max-w-full max-h-[70vh]" />
+              )}
+              {previewAttachment.fileType === "audio" && (
+                <div className="p-8 w-full">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="size-16 rounded-full bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center">
+                      <Mic className="size-7 text-white" />
+                    </div>
+                    <audio src={previewUrl} controls className="w-full" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   );
 }
