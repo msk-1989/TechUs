@@ -1,8 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { db } from "@/lib/db";
 
-export type Role = "admin" | "lead" | "tester";
+export type Role = "admin" | "lead" | "tester" | "developer";
 
 export interface SessionUser {
   id: string;
@@ -35,7 +34,7 @@ export async function requireAuth(): Promise<SessionUser> {
 /**
  * Require admin role. Returns the user or throws 403.
  * Admins can: create/edit/delete test cases, manage users, view audit logs,
- * manage milestones, assign test cases.
+ * manage milestones, assign test cases, assign bugs.
  */
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireAuth();
@@ -71,4 +70,53 @@ export function canViewAuditLog(user: SessionUser | null | undefined): boolean {
  */
 export function canManageUsers(user: SessionUser | null | undefined): boolean {
   return user?.role === "admin";
+}
+
+/**
+ * Check if a user can assign bugs to developers (admin/lead only).
+ */
+export function canAssignBugs(user: SessionUser | null | undefined): boolean {
+  return isAdmin(user);
+}
+
+/**
+ * Check if a user can update a specific bug's status.
+ * - Admin/lead: can update any bug
+ * - Developer: can update bugs assigned to them
+ * - Tester: can only update bugs they reported (limited)
+ */
+export function canUpdateBug(
+  user: SessionUser | null | undefined,
+  bug: { assigneeId?: string | null; reporterId?: string | null }
+): boolean {
+  if (!user) return false;
+  if (isAdmin(user)) return true;
+  if (user.role === "developer" && bug.assigneeId === user.testerId) return true;
+  // Testers cannot update bug status (only admin/assignee can)
+  return false;
+}
+
+/**
+ * Check if a user is a developer (can fix bugs assigned to them).
+ */
+export function isDeveloper(user: SessionUser | null | undefined): boolean {
+  return user?.role === "developer";
+}
+
+/**
+ * Get the list of nav items this role should see.
+ */
+export function getVisibleNavItems(role: string | undefined): string[] {
+  const base = ["dashboard", "test_cases", "bugs", "reports"];
+  if (role === "admin") {
+    return [...base, "testers", "audit", "requirements", "modules"];
+  }
+  if (role === "lead") {
+    return [...base, "testers", "requirements", "modules"];
+  }
+  if (role === "developer") {
+    return [...base, "my_bugs"];
+  }
+  // tester
+  return [...base, "testers", "requirements", "modules"];
 }

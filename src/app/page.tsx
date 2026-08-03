@@ -48,6 +48,9 @@ import {
   Pencil,
   Trash2,
   Copy,
+  Code,
+  Wrench,
+  PlayCircle,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -98,17 +101,19 @@ import { useSession, signOut } from "next-auth/react";
 import { AuthGate } from "@/components/auth-gate";
 
 const TESTER_ROLE_META: Record<string, { label: string; icon: typeof Crown }> = {
-  lead:   { label: "QA Lead",     icon: Crown },
-  admin:  { label: "Admin",       icon: Shield },
-  tester: { label: "Tester",       icon: User },
+  lead:      { label: "QA Lead",     icon: Crown },
+  admin:     { label: "Admin",       icon: Shield },
+  tester:    { label: "Tester",      icon: User },
+  developer: { label: "Developer",  icon: Code },
 };
 
-type ViewKey = "dashboard" | "test_cases" | "bugs" | "testers" | "audit" | "requirements" | "modules" | "reports";
+type ViewKey = "dashboard" | "test_cases" | "bugs" | "my_bugs" | "testers" | "audit" | "requirements" | "modules" | "reports";
 
-const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean }[] = [
+const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean; developerOnly?: boolean }[] = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "test_cases", label: "Test Cases", icon: ListChecks },
   { key: "bugs",       label: "Bug Tracker", icon: BugIcon },
+  { key: "my_bugs",    label: "My Bugs",     icon: Wrench, developerOnly: true },
   { key: "testers",    label: "Testers",     icon: Users },
   { key: "audit",      label: "Audit Log",   icon: ScrollText, adminOnly: true },
   { key: "requirements", label: "Requirements", icon: FileCheck },
@@ -382,6 +387,7 @@ function AppContent() {
               {view === "modules" && <ModulesView stats={stats} onNavigate={setView} />}
               {view === "audit" && <AuditLogView userRole={(session?.user as any)?.role} />}
               {view === "requirements" && <RequirementsView />}
+              {view === "my_bugs" && <MyBugsView session={session} />}
               {view === "reports" && <ReportsView stats={stats} testCases={testCases} bugs={bugs} />}
             </motion.div>
           </AnimatePresence>
@@ -750,10 +756,15 @@ function Sidebar({
 }: { view: ViewKey; onViewChange: (v: ViewKey) => void; stats: any; userRole?: string }) {
   const counts = stats?.summary;
   const isAdmin = userRole === "admin" || userRole === "lead";
+  const isDeveloper = userRole === "developer";
   return (
     <aside className="md:w-60 lg:w-64 border-b md:border-b-0 md:border-r bg-white shrink-0">
       <nav className="flex md:flex-col gap-1 p-3 overflow-x-auto md:overflow-y-auto md:h-[calc(100vh-4rem)] md:sticky md:top-16">
-        {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+        {NAV_ITEMS.filter((item) => {
+          if (item.adminOnly && !isAdmin) return false;
+          if (item.developerOnly && !isDeveloper) return false;
+          return true;
+        }).map((item) => {
           const Icon = item.icon;
           const isActive = view === item.key;
           const count =
@@ -3293,6 +3304,283 @@ function RequirementsView() {
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/* ---------------- My Bugs View (Developer Only) ---------------- */
+function MyBugsView({ session }: { session: any }) {
+  const [bugs, setBugs] = useState<Bug[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("open");
+  const [expandedBug, setExpandedBug] = useState<string | null>(null);
+  const [resolutionNotes, setResolutionNotes] = useState<Record<string, string>>({});
+  const { toast } = useToast();
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/bugs?assignedToMe=true&status=" + statusFilter);
+      const data = await res.json();
+      setBugs(data.bugs || []);
+    } catch {
+      setBugs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const updateBugStatus = async (bugId: string, status: string) => {
+    try {
+      const notes = resolutionNotes[bugId] || "";
+      const res = await fetch("/api/bugs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: bugId,
+          status,
+          ...(status === "fixed" && notes ? { resolutionNotes: notes } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Update failed");
+      }
+      toast({
+        title: "Bug updated",
+        description: status === "fixed"
+          ? "Marked as fixed — reporter has been notified to verify"
+          : `Status: ${status}`,
+      });
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Update failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const openCount = bugs.filter((b) => b.status === "open" || b.status === "in_progress").length;
+  const fixedCount = bugs.filter((b) => b.status === "fixed").length;
+  const verifiedCount = bugs.filter((b) => b.status === "verified").length;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+          <Wrench className="size-5 text-teal-600" />
+          My Assigned Bugs
+        </h2>
+        <p className="text-sm text-slate-500">
+          Bugs assigned to you for fixing. Update status as you work on them.
+        </p>
+      </div>
+
+      {/* Quick stats */}
+      <div className="grid grid-cols-4 gap-3">
+        <Card><CardContent className="p-3">
+          <div className="text-[10px] uppercase text-slate-500 font-semibold">Open</div>
+          <div className="text-2xl font-bold text-rose-700">{openCount}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <div className="text-[10px] uppercase text-slate-500 font-semibold">In Progress</div>
+          <div className="text-2xl font-bold text-amber-700">{bugs.filter((b) => b.status === "in_progress").length}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <div className="text-[10px] uppercase text-slate-500 font-semibold">Fixed</div>
+          <div className="text-2xl font-bold text-sky-700">{fixedCount}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <div className="text-[10px] uppercase text-slate-500 font-semibold">Verified</div>
+          <div className="text-2xl font-bold text-emerald-700">{verifiedCount}</div>
+        </CardContent></Card>
+      </div>
+
+      {/* Status filter */}
+      <div className="flex items-center gap-2">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-48 h-9 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="open">Open (to start)</SelectItem>
+            <SelectItem value="in_progress">In Progress</SelectItem>
+            <SelectItem value="fixed">Fixed (awaiting verify)</SelectItem>
+            <SelectItem value="verified">Verified (closed)</SelectItem>
+            <SelectItem value="wont_fix">Won't Fix</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={refresh}>
+          <RefreshCw className="size-3.5 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      {/* Bug list */}
+      <div className="space-y-2">
+        {loading ? (
+          <Card><CardContent className="py-12 text-center text-sm text-slate-400">Loading your bugs…</CardContent></Card>
+        ) : bugs.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-slate-400">
+              <Wrench className="size-8 mx-auto mb-2 text-slate-300" />
+              No bugs assigned to you with status "{statusFilter}".
+              <br />
+              <span className="text-xs">When an admin assigns a bug to you, it will appear here.</span>
+            </CardContent>
+          </Card>
+        ) : (
+          bugs.map((bug) => (
+            <Card key={bug.id} className="overflow-hidden">
+              <CardContent className="p-3.5">
+                <div className="flex items-start gap-3">
+                  <div className={`size-2 rounded-full mt-1.5 ${
+                    bug.severity === "blocker" ? "bg-rose-700" :
+                    bug.severity === "critical" ? "bg-rose-500" :
+                    bug.severity === "major" ? "bg-orange-500" :
+                    "bg-amber-400"
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-slate-900">{bug.title}</p>
+                        {bug.testCase && (
+                          <p className="text-[11px] text-slate-500 mt-0.5">Linked: {bug.testCase.title}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${BUG_SEVERITY_META[bug.severity].bg} ${BUG_SEVERITY_META[bug.severity].text}`}>
+                          {BUG_SEVERITY_META[bug.severity].label}
+                        </span>
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${BUG_STATUS_META[bug.status].bg} ${BUG_STATUS_META[bug.status].text}`}>
+                          {BUG_STATUS_META[bug.status].label}
+                        </span>
+                      </div>
+                    </div>
+                    {bug.description && (
+                      <p className="text-xs text-slate-600 mt-1.5 line-clamp-2">{bug.description}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-slate-500">
+                      {bug.moduleName && <span className="flex items-center gap-1"><Globe className="size-3" />{bug.moduleName}</span>}
+                      {bug.reporterRef && (
+                        <span className="flex items-center gap-1">
+                          <Avatar className="size-4">
+                            <AvatarFallback className={`text-[8px] font-bold bg-gradient-to-br ${testerColor(bug.reporterRef.color).gradient} text-white`}>
+                              {initials(bug.reporterRef.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          Reported by <strong className="text-slate-700">{bug.reporterRef.name}</strong>
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1"><Calendar className="size-3" />{new Date(bug.createdAt).toLocaleDateString()}</span>
+                      <button
+                        className="ml-auto text-emerald-600 hover:underline font-medium"
+                        onClick={() => setExpandedBug(expandedBug === bug.id ? null : bug.id)}
+                      >
+                        {expandedBug === bug.id ? "Hide" : "Work on this"}
+                      </button>
+                    </div>
+
+                    {expandedBug === bug.id && (
+                      <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                        {bug.stepsToRepro && (
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Steps to Reproduce</p>
+                            <pre className="text-xs text-slate-700 bg-slate-50 rounded p-2 whitespace-pre-wrap font-mono">{bug.stepsToRepro}</pre>
+                          </div>
+                        )}
+                        {bug.expected && (
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Expected</p>
+                            <p className="text-xs text-slate-700">{bug.expected}</p>
+                          </div>
+                        )}
+                        {bug.actual && (
+                          <div>
+                            <p className="text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Actual</p>
+                            <p className="text-xs text-slate-700">{bug.actual}</p>
+                          </div>
+                        )}
+
+                        {/* Developer action panel */}
+                        <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 space-y-2">
+                          <p className="text-[11px] font-semibold text-teal-800 flex items-center gap-1">
+                            <Wrench className="size-3" />
+                            Developer Actions
+                          </p>
+
+                          {(bug.status === "open" || bug.status === "in_progress") && (
+                            <>
+                              <Label className="text-[10px] text-teal-700">
+                                Resolution notes (required when marking as fixed)
+                              </Label>
+                              <Textarea
+                                value={resolutionNotes[bug.id] || ""}
+                                onChange={(e) => setResolutionNotes({ ...resolutionNotes, [bug.id]: e.target.value })}
+                                placeholder="Describe what you fixed, the root cause, and any testing you did…"
+                                className="min-h-20 text-xs bg-white"
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                {bug.status === "open" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updateBugStatus(bug.id, "in_progress")}
+                                    className="h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-50"
+                                  >
+                                    <PlayCircle className="size-3 mr-1" /> Start working
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  onClick={() => updateBugStatus(bug.id, "fixed")}
+                                  disabled={!resolutionNotes[bug.id]}
+                                  className="h-7 text-xs bg-sky-600 hover:bg-sky-700"
+                                >
+                                  <CheckCircle2 className="size-3 mr-1" /> Mark as fixed
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateBugStatus(bug.id, "wont_fix")}
+                                  className="h-7 text-xs border-slate-300 text-slate-600 hover:bg-slate-50"
+                                >
+                                  Won't fix
+                                </Button>
+                              </div>
+                              <p className="text-[10px] text-teal-600">
+                                Marking as fixed notifies the reporter to verify and close.
+                              </p>
+                            </>
+                          )}
+
+                          {bug.status === "fixed" && (
+                            <p className="text-xs text-sky-700">
+                              ✅ You marked this as fixed. Waiting for {bug.reporterRef?.name ?? "the reporter"} to verify.
+                            </p>
+                          )}
+
+                          {bug.status === "verified" && (
+                            <p className="text-xs text-emerald-700">
+                              ✅ This bug has been verified and closed.
+                            </p>
+                          )}
+
+                          {bug.status === "wont_fix" && (
+                            <p className="text-xs text-slate-600">
+                              This bug was marked as "Won't Fix".
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
     </div>
   );
 }

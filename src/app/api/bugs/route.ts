@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createAuditLog, notifyUser } from "@/lib/audit";
+import { getCurrentUser, isAdmin, canUpdateBug } from "@/lib/permissions";
 
 export async function GET(req: NextRequest) {
   const status = req.nextUrl.searchParams.get("status");
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
 
   const session = await getServerSession(authOptions);
   const currentTesterId = (session?.user as any)?.testerId;
+  const role = (session?.user as any)?.role;
 
   const where: Record<string, unknown> = {};
   if (status && status !== "all") where.status = status;
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ bugs });
+  return NextResponse.json({ bugs, currentUserRole: role });
 }
 
 export async function POST(req: NextRequest) {
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
   const userId = (session.user as any).id;
   const testerId = (session.user as any).testerId;
   const testerName = session.user.name ?? undefined;
+  const role = (session.user as any).role;
 
   const body = await req.json();
   const {
@@ -78,8 +81,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Title required" }, { status: 400 });
   }
 
-  const assignee = assigneeId
-    ? await db.tester.findUnique({ where: { id: assigneeId }, include: { user: true } })
+  // Only admin/lead can assign bugs to developers; developers/testers create unassigned
+  const canAssign = isAdmin({ role } as any);
+  const finalAssigneeId = canAssign ? (assigneeId || null) : null;
+
+  const assignee = finalAssigneeId
+    ? await db.tester.findUnique({ where: { id: finalAssigneeId }, include: { user: true } })
     : null;
 
   const bug = await db.bug.create({
@@ -92,7 +99,7 @@ export async function POST(req: NextRequest) {
       reporter: reporter ?? testerName,
       reporterId: testerId ?? null,
       assignee: assignee?.name ?? null,
-      assigneeId: assigneeId || null,
+      assigneeId: finalAssigneeId,
       stepsToRepro,
       expected,
       actual,
@@ -105,7 +112,7 @@ export async function POST(req: NextRequest) {
     action: "bug.create",
     entityType: "Bug",
     entityId: bug.id,
-    details: `Created bug: "${title}" (${severity ?? "major"})`,
+    details: `Created bug: "${title}" (${severity ?? "major"})${assignee ? ` → assigned to ${assignee.name}` : ""}`,
   });
 
   // Notify the assignee if set
@@ -123,33 +130,72 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const session = await getCurrentUser();
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const userId = (session.user as any).id;
+  const userId = session.id;
+  const testerId = session.testerId;
 
   const body = await req.json();
-  const { id, status, severity, priority, assignee, assigneeId } = body;
+  const { id, status, severity, priority, assignee, assigneeId, resolutionNotes } = body;
 
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
 
+  // Fetch the bug to check permissions
   const before = await db.bug.findUnique({
     where: { id },
-    select: { title: true, status: true, assigneeId: true },
+    select: { title: true, status: true, assigneeId: true, reporterId: true },
   });
+  if (!before) {
+    return NextResponse.json({ error: "Bug not found" }, { status: 404 });
+  }
+
+  // Permission check:
+  // - Admin/lead: can change anything (status, severity, priority, assignee)
+  // - Developer: can change status ONLY on bugs assigned to them, and add resolution notes
+  // - Tester: cannot change bug status (must ask admin/developer)
+  const isAssignedToThisDev = session.role === "developer" && before.assigneeId === testerId;
+
+  // Restricted fields (only admin/lead can change)
+  const restrictedFields = ["severity", "priority", "assignee", "assigneeId"];
+  const attemptingRestricted = restrictedFields.some((f) => body[f] !== undefined);
+
+  if (attemptingRestricted && !isAdmin(session)) {
+    return NextResponse.json(
+      { error: "Forbidden — only admin/lead can change severity, priority, or assignee" },
+      { status: 403 }
+    );
+  }
+
+  // Status change permissions
+  if (status && !isAdmin(session) && !isAssignedToThisDev) {
+    return NextResponse.json(
+      { error: "Forbidden — you can only update status of bugs assigned to you" },
+      { status: 403 }
+    );
+  }
+
+  // Build update data
+  const updateData: Record<string, unknown> = {};
+  if (status) updateData.status = status;
+  if (severity) updateData.severity = severity;
+  if (priority) updateData.priority = priority;
+  if (assignee !== undefined) updateData.assignee = assignee;
+  if (assigneeId !== undefined) updateData.assigneeId = assigneeId || null;
+
+  // If developer is marking as fixed/resolved, store resolution notes in the bug
+  if (resolutionNotes && (status === "fixed" || status === "verified")) {
+    // Append resolution notes to description for now (could be a separate field later)
+    const existingDesc = (await db.bug.findUnique({ where: { id }, select: { description: true } }))?.description || "";
+    updateData.description = `${existingDesc}\n\n--- Resolution Notes (${new Date().toISOString().slice(0, 10)}) ---\n${resolutionNotes}`.trim();
+  }
 
   const updated = await db.bug.update({
     where: { id },
-    data: {
-      ...(status ? { status } : {}),
-      ...(severity ? { severity } : {}),
-      ...(priority ? { priority } : {}),
-      ...(assignee !== undefined ? { assignee } : {}),
-      ...(assigneeId !== undefined ? { assigneeId: assigneeId || null } : {}),
-    },
+    data: updateData,
   });
 
   // If assignee changed, notify new assignee
@@ -169,12 +215,29 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // If developer marked as fixed, notify the reporter (so they can verify)
+  if (status === "fixed" && before.reporterId) {
+    const reporter = await db.tester.findUnique({
+      where: { id: before.reporterId },
+      include: { user: true },
+    });
+    if (reporter?.userId) {
+      await notifyUser({
+        userId: reporter.userId,
+        type: "bug_fixed",
+        title: `Bug marked as fixed: ${before?.title ?? "Bug"}`,
+        body: `The developer has marked this bug as fixed. Please verify and close.`,
+        link: "/?view=bugs",
+      });
+    }
+  }
+
   await createAuditLog({
     userId,
     action: "bug.update",
     entityType: "Bug",
     entityId: id,
-    details: `"${before?.title ?? "Bug"}" — ${Object.keys(body).filter(k => !["id"].includes(k)).join(", ")}`,
+    details: `"${before?.title ?? "Bug"}" — ${Object.keys(body).filter(k => !["id", "resolutionNotes"].includes(k)).join(", ")}${resolutionNotes ? ` | notes: ${resolutionNotes.slice(0, 60)}` : ""}`,
   });
 
   return NextResponse.json({ bug: updated });

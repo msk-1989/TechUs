@@ -3,11 +3,13 @@ import { SEED_MODULES } from "../src/lib/seed-data";
 import bcrypt from "bcryptjs";
 
 const SEED_TESTERS = [
-  { name: "Aarav Sharma",  email: "aarav.s@hidayah.test",  role: "lead",    color: "emerald" },
-  { name: "Priya Nair",    email: "priya.n@hidayah.test",  role: "tester",  color: "violet" },
-  { name: "Imran Khan",    email: "imran.k@hidayah.test",  role: "tester",  color: "amber" },
-  { name: "Sarah Joseph",  email: "sarah.j@teachus.test",  role: "tester",  color: "sky" },
-  { name: "Bilal Ahmed",   email: "bilal.a@teachus.test",  role: "tester",  color: "rose" },
+  { name: "Aarav Sharma",  email: "aarav.s@hidayah.test",  role: "lead",      color: "emerald" },
+  { name: "Priya Nair",    email: "priya.n@hidayah.test",  role: "tester",    color: "violet" },
+  { name: "Imran Khan",    email: "imran.k@hidayah.test",  role: "tester",    color: "amber" },
+  { name: "Sarah Joseph",  email: "sarah.j@teachus.test",  role: "tester",    color: "sky" },
+  { name: "Bilal Ahmed",   email: "bilal.a@teachus.test",  role: "tester",    color: "rose" },
+  { name: "Rahul Verma",   email: "rahul.v@techus.app",    role: "developer", color: "teal" },
+  { name: "Ananya Reddy",  email: "ananya.r@techus.app",   role: "developer", color: "sky" },
 ];
 
 async function main() {
