@@ -61,4 +61,4 @@ fi
 echo ""
 echo "=== Deployment Complete ==="
 echo "URL: $DEPLOY_URL"
-echo "Demo login: admin@techus.app / admin123"
+echo "Login URL: $DEPLOY_URL"

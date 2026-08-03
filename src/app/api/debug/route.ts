@@ -68,11 +68,6 @@ export async function GET() {
     allEnvVarsSet: allSet,
     using_any_fallback: usingFallback,
     diagnosis,
-    login_test_url: "https://tech-us-seven.vercel.app/api/auth/test-login?email=admin@techus.app&password=admin123",
     login_url: "https://tech-us-seven.vercel.app",
-    credentials: {
-      admin_email: "admin@techus.app",
-      admin_password: "admin123",
-    },
   }, { status: 200 });
 }

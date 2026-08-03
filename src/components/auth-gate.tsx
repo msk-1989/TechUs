@@ -48,9 +48,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             >
               Sign in to continue
             </a>
-            <p className="text-[11px] text-slate-400 mt-6">
-              Demo: <strong>admin@techus.app / admin123</strong>
-            </p>
           </div>
         </div>
         {showAuth && <AuthModal onClose={() => {}} />}

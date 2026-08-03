@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Mail, Lock, User as UserIcon, Eye, EyeOff, Loader2, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
+import { Shield, Mail, Lock, User as UserIcon, Eye, EyeOff, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,17 +54,6 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillDemo = (role: "admin" | "tester") => {
-    if (role === "admin") {
-      setEmail("admin@techus.app");
-      setPassword("admin123");
-    } else {
-      setEmail("priya.n@hidayah.test");
-      setPassword("tester123");
-    }
-    setMode("login");
   };
 
   return (
@@ -199,30 +188,6 @@ export function AuthModal({ onClose }: { onClose: () => void }) {
                   </button>
                 </>
               )}
-            </div>
-
-            {/* Demo credentials */}
-            <div className="border-t border-slate-100 pt-3 space-y-2">
-              <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold flex items-center gap-1.5">
-                <Sparkles className="size-3" />
-                Demo accounts (click to fill)
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => fillDemo("admin")}
-                  className="text-left p-2 rounded-lg border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition text-[11px]"
-                >
-                  <div className="font-semibold text-slate-700">Admin</div>
-                  <div className="text-slate-500 text-[10px]">admin@techus.app</div>
-                </button>
-                <button
-                  onClick={() => fillDemo("tester")}
-                  className="text-left p-2 rounded-lg border border-slate-200 hover:border-violet-300 hover:bg-violet-50 transition text-[11px]"
-                >
-                  <div className="font-semibold text-slate-700">Tester</div>
-                  <div className="text-slate-500 text-[10px]">priya.n@hidayah.test</div>
-                </button>
-              </div>
             </div>
           </div>
         </motion.div>

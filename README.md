@@ -29,14 +29,9 @@ Production-grade QA reporting platform for **Hidayah Connect & TeachUs**. Track 
 - **State**: Zustand (current tester) + TanStack Query patterns
 - **Animations**: Framer Motion
 
-## Demo Accounts
+## Getting Access
 
-- **Admin**: `admin@techus.app` / `admin123`
-- **Tester**: `priya.n@hidayah.test` / `tester123`
-- **Tester**: `aarav.s@hidayah.test` / `tester123` (QA Lead)
-- **Tester**: `imran.k@hidayah.test` / `tester123`
-- **Tester**: `sarah.j@teachus.test` / `tester123`
-- **Tester**: `bilal.a@teachus.test` / `tester123`
+Contact the system administrator to create your account. New accounts can self-register via the "Create an account" link on the login page, but will be assigned the `tester` role by default. Admin or lead roles are granted manually by existing admins.
 
 ## Local Development
 
