@@ -392,7 +392,7 @@ function AppContent() {
                   }}
                 />
               )}
-              {view === "modules" && <ModulesView stats={stats} onNavigate={setView} />}
+              {view === "modules" && <ModulesView stats={stats} onNavigate={setView} userRole={(session?.user as any)?.role} />}
               {view === "audit" && <AuditLogView userRole={(session?.user as any)?.role} />}
               {view === "requirements" && <RequirementsView />}
               {view === "my_bugs" && <MyBugsView session={session} />}
@@ -2589,87 +2589,538 @@ function TestersView({
 }
 
 /* ---------------- Modules View ---------------- */
-function ModulesView({ stats, onNavigate }: { stats: any; onNavigate: (v: ViewKey) => void }) {
-  if (!stats) return <LoadingSkeleton />;
+function ModulesView({ stats, onNavigate, userRole }: { stats: any; onNavigate: (v: ViewKey) => void; userRole?: string }) {
+  const [modules, setModules] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModuleDialog, setShowModuleDialog] = useState(false);
+  const [editModule, setEditModule] = useState<any | null>(null);
+  const [deleteModule, setDeleteModule] = useState<any | null>(null);
+  const [expandedModule, setExpandedModule] = useState<string | null>(null);
+  const [showSuiteDialog, setShowSuiteDialog] = useState(false);
+  const [suiteModuleId, setSuiteModuleId] = useState<string | null>(null);
+  const [editSuite, setEditSuite] = useState<any | null>(null);
+  const [deleteSuite, setDeleteSuite] = useState<any | null>(null);
+  const { toast } = useToast();
+  const isAdmin = userRole === "admin" || userRole === "lead";
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/modules");
+      const data = await res.json();
+      setModules(data.modules || []);
+    } catch { setModules([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleDeleteModule = async (mod: any) => {
+    try {
+      const res = await fetch(`/api/modules/${mod.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      const data = await res.json();
+      toast({ title: "Module deleted", description: `${data.deleted.name} — ${data.deleted.suiteCount} suites, ${data.deleted.testCaseCount} test cases` });
+      setDeleteModule(null);
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteSuite = async (suite: any) => {
+    try {
+      const res = await fetch(`/api/suites/${suite.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      toast({ title: "Suite deleted", description: `${suite.name}` });
+      setDeleteSuite(null);
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  if (loading) return <LoadingSkeleton />;
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-bold text-slate-900">Module Reports</h2>
-        <p className="text-sm text-slate-500">Test coverage and pass rate for each of the 7 platform modules</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Modules & Suites</h2>
+          <p className="text-sm text-slate-500">{modules.length} modules · fully dynamic — create, edit, delete</p>
+        </div>
+        {isAdmin && (
+          <Button size="sm" onClick={() => { setEditModule(null); setShowModuleDialog(true); }} className="bg-emerald-600 hover:bg-emerald-700">
+            <Plus className="size-3.5 mr-1" /> New Module
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {stats.moduleStats.map((m: ModuleStat) => {
-          const Icon = MODULE_ICONS[m.icon] ?? Globe;
+      <div className="space-y-3">
+        {modules.length === 0 && !loading && (
+          <Card><CardContent className="py-12 text-center text-sm text-slate-400">
+            No modules yet. {isAdmin ? "Click 'New Module' to create your first one." : "Ask an admin to create modules."}
+          </CardContent></Card>
+        )}
+        {modules.map((mod: any) => {
+          const Icon = MODULE_ICONS[mod.icon] ?? Globe;
+          const totalTests = mod.suites?.reduce((sum: number, s: any) => sum + (s.testCases?.length || 0), 0) || 0;
+          const isExpanded = expandedModule === mod.id;
           return (
-            <Card key={m.id} className="overflow-hidden">
+            <Card key={mod.id} className="overflow-hidden">
               <CardHeader className="pb-3">
                 <div className="flex items-start gap-3">
                   <div className="size-11 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center shrink-0 shadow-sm">
                     <Icon className="size-5.5 text-white" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <CardTitle className="text-base">{m.name}</CardTitle>
-                    <CardDescription className="text-xs line-clamp-1">{m.description}</CardDescription>
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpandedModule(isExpanded ? null : mod.id)}>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      {mod.name}
+                      {isExpanded ? <ChevronDown className="size-4 text-slate-400" /> : <ChevronRight className="size-4 text-slate-400" />}
+                    </CardTitle>
+                    <CardDescription className="text-xs line-clamp-1">{mod.description}</CardDescription>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => onNavigate("test_cases")}>
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-sky-700 hover:bg-sky-50" onClick={() => { setEditModule(mod); setShowModuleDialog(true); }} title="Edit module">
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-rose-700 hover:bg-rose-50" onClick={() => setDeleteModule(mod)} title="Delete module">
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => onNavigate("test_cases")} className="shrink-0">
                     Open <ChevronRight className="size-3.5" />
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-[11px] uppercase font-semibold text-slate-500">Coverage</span>
-                      <span className="text-sm font-bold text-slate-900">{m.coverage}%</span>
-                    </div>
-                    <Progress value={m.coverage} className="h-1.5" />
-                  </div>
-                  <div>
-                    <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-[11px] uppercase font-semibold text-slate-500">Pass Rate</span>
-                      <span className="text-sm font-bold text-emerald-700">{m.passRate}%</span>
-                    </div>
-                    <Progress value={m.passRate} className="h-1.5" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-5 gap-1 text-center text-[11px]">
-                  <div className="rounded bg-emerald-50 py-1.5">
-                    <div className="font-bold text-emerald-700">{m.pass}</div>
-                    <div className="text-slate-500">Pass</div>
-                  </div>
-                  <div className="rounded bg-rose-50 py-1.5">
-                    <div className="font-bold text-rose-700">{m.fail}</div>
-                    <div className="text-slate-500">Fail</div>
-                  </div>
-                  <div className="rounded bg-amber-50 py-1.5">
-                    <div className="font-bold text-amber-700">{m.blocked}</div>
-                    <div className="text-slate-500">Blocked</div>
-                  </div>
-                  <div className="rounded bg-sky-50 py-1.5">
-                    <div className="font-bold text-sky-700">{m.skipped}</div>
-                    <div className="text-slate-500">Skipped</div>
-                  </div>
-                  <div className="rounded bg-slate-50 py-1.5">
-                    <div className="font-bold text-slate-600">{m.notRun}</div>
-                    <div className="text-slate-500">Not Run</div>
-                  </div>
-                </div>
-
                 <div className="text-[11px] text-slate-500 flex items-center gap-3">
-                  <span><strong className="text-slate-700">{m.total}</strong> total tests</span>
+                  <span><strong className="text-slate-700">{mod.suites?.length || 0}</strong> suites</span>
                   <span>·</span>
-                  <span><strong className="text-slate-700">{m.pass + m.fail + m.blocked + m.skipped}</strong> executed</span>
+                  <span><strong className="text-slate-700">{totalTests}</strong> test cases</span>
                 </div>
+
+                {isExpanded && (
+                  <div className="border-t border-slate-100 pt-3 space-y-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="text-[10px] uppercase font-semibold text-slate-500">Suites in this module</h4>
+                      {isAdmin && (
+                        <Button size="sm" variant="ghost" className="h-6 text-xs text-emerald-700" onClick={() => { setSuiteModuleId(mod.id); setEditSuite(null); setShowSuiteDialog(true); }}>
+                          <Plus className="size-3 mr-1" /> Add Suite
+                        </Button>
+                      )}
+                    </div>
+                    {mod.suites?.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-2">No suites yet</p>
+                    ) : (
+                      mod.suites.map((suite: any) => (
+                        <div key={suite.id} className="flex items-center gap-2 p-2 rounded border border-slate-100 hover:bg-slate-50">
+                          <ListChecks className="size-3.5 text-slate-400 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium text-slate-900">{suite.name}</span>
+                            {suite.description && <span className="text-[10px] text-slate-500 ml-2">{suite.description}</span>}
+                          </div>
+                          <Badge variant="outline" className="text-[9px]">{suite.testCases?.length || 0} tests</Badge>
+                          {isAdmin && (
+                            <div className="flex items-center gap-0.5">
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-sky-700 hover:bg-sky-50" onClick={() => { setSuiteModuleId(mod.id); setEditSuite(suite); setShowSuiteDialog(true); }} title="Edit suite">
+                                <Pencil className="size-3" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-rose-700 hover:bg-rose-50" onClick={() => setDeleteSuite(suite)} title="Delete suite">
+                                <Trash2 className="size-3" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
         })}
       </div>
+
+      {/* Milestones Section */}
+      <MilestonesSection isAdmin={isAdmin} />
+
+      {/* Module Dialog */}
+      {showModuleDialog && (
+        <ModuleEditDialog
+          module={editModule}
+          onClose={() => { setShowModuleDialog(false); setEditModule(null); }}
+          onSuccess={() => { setShowModuleDialog(false); setEditModule(null); refresh(); }}
+        />
+      )}
+
+      {/* Suite Dialog */}
+      {showSuiteDialog && (
+        <SuiteEditDialog
+          suite={editSuite}
+          moduleId={suiteModuleId}
+          modules={modules}
+          onClose={() => { setShowSuiteDialog(false); setEditSuite(null); setSuiteModuleId(null); }}
+          onSuccess={() => { setShowSuiteDialog(false); setEditSuite(null); setSuiteModuleId(null); refresh(); }}
+        />
+      )}
+
+      {/* Delete Module Confirmation */}
+      {deleteModule && (
+        <Dialog open onOpenChange={() => setDeleteModule(null)}>
+          <DialogContent aria-describedby={undefined} className="max-w-md">
+            <DialogHeader><DialogTitle className="flex items-center gap-2 text-rose-700"><Trash2 className="size-4" /> Delete Module</DialogTitle></DialogHeader>
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+              <p className="text-sm font-semibold text-rose-800 mb-1">Are you sure?</p>
+              <p className="text-xs text-rose-700">Deleting <strong>{deleteModule.name}</strong> will permanently delete:</p>
+              <ul className="text-xs text-rose-700 mt-1 ml-4 list-disc">
+                <li>{deleteModule.suites?.length || 0} test suites</li>
+                <li>{deleteModule.suites?.reduce((s: number, su: any) => s + (su.testCases?.length || 0), 0) || 0} test cases</li>
+                <li>All related executions and bug links</li>
+              </ul>
+              <p className="text-xs text-rose-700 mt-2 font-medium">This cannot be undone.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setDeleteModule(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => handleDeleteModule(deleteModule)}>Delete permanently</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Delete Suite Confirmation */}
+      {deleteSuite && (
+        <Dialog open onOpenChange={() => setDeleteSuite(null)}>
+          <DialogContent aria-describedby={undefined} className="max-w-md">
+            <DialogHeader><DialogTitle className="flex items-center gap-2 text-rose-700"><Trash2 className="size-4" /> Delete Suite</DialogTitle></DialogHeader>
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+              <p className="text-sm font-semibold text-rose-800 mb-1">Are you sure?</p>
+              <p className="text-xs text-rose-700">Deleting <strong>{deleteSuite.name}</strong> will also delete {deleteSuite.testCases?.length || 0} test cases and their executions.</p>
+              <p className="text-xs text-rose-700 mt-2 font-medium">This cannot be undone.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setDeleteSuite(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => handleDeleteSuite(deleteSuite)}>Delete permanently</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
+  );
+}
+
+/* ---------------- Module Edit Dialog ---------------- */
+function ModuleEditDialog({ module, onClose, onSuccess }: { module: any | null; onClose: () => void; onSuccess: () => void }) {
+  const [key, setKey] = useState(module?.key ?? "");
+  const [name, setName] = useState(module?.name ?? "");
+  const [description, setDescription] = useState(module?.description ?? "");
+  const [icon, setIcon] = useState(module?.icon ?? "Globe");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const iconOptions = ["Globe", "UserPlus", "LayoutDashboard", "GraduationCap", "BookOpen", "Shield", "LifeBuoy", "Users", "GitBranch", "Route", "Bell"];
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const url = module ? `/api/modules/${module.id}` : "/api/modules";
+      const method = module ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, name, description, icon }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      toast({ title: module ? "Module updated" : "Module created", description: name });
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent aria-describedby={undefined} className="max-w-md">
+        <DialogHeader><DialogTitle>{module ? "Edit Module" : "New Module"}</DialogTitle></DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-xs">Module Key *</Label>
+            <Input value={key} onChange={(e) => setKey(e.target.value.replace(/\s+/g, "_").toLowerCase())} placeholder="e.g. payment_gateway" className="mt-1 font-mono text-xs" />
+            <p className="text-[10px] text-slate-400 mt-1">Unique identifier — used in filters and API. No spaces, lowercase.</p>
+          </div>
+          <div>
+            <Label className="text-xs">Module Name *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Payment Gateway" className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs">Description</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this module cover?" className="mt-1 min-h-16" />
+          </div>
+          <div>
+            <Label className="text-xs">Icon</Label>
+            <Select value={icon} onValueChange={setIcon}>
+              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectContent className="max-h-60">
+                {iconOptions.map((ic) => {
+                  const I = MODULE_ICONS[ic] ?? Globe;
+                  return <SelectItem key={ic} value={ic}><span className="flex items-center gap-2"><I className="size-3.5" /> {ic}</span></SelectItem>;
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={loading || !key || !name} className="bg-emerald-600 hover:bg-emerald-700">
+            {loading ? "Saving…" : module ? "Save changes" : "Create module"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------------- Suite Edit Dialog ---------------- */
+function SuiteEditDialog({ suite, moduleId, modules, onClose, onSuccess }: {
+  suite: any | null; moduleId: string | null; modules: any[]; onClose: () => void; onSuccess: () => void;
+}) {
+  const [name, setName] = useState(suite?.name ?? "");
+  const [description, setDescription] = useState(suite?.description ?? "");
+  const [selectedModuleId, setSelectedModuleId] = useState(suite?.moduleId ?? moduleId ?? "");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const url = suite ? `/api/suites/${suite.id}` : "/api/suites";
+      const method = suite ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleId: selectedModuleId, name, description }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      toast({ title: suite ? "Suite updated" : "Suite created", description: name });
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent aria-describedby={undefined} className="max-w-md">
+        <DialogHeader><DialogTitle>{suite ? "Edit Suite" : "New Suite"}</DialogTitle></DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-xs">Parent Module *</Label>
+            <Select value={selectedModuleId} onValueChange={setSelectedModuleId}>
+              <SelectTrigger className="mt-1"><SelectValue placeholder="Select module" /></SelectTrigger>
+              <SelectContent>
+                {modules.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Suite Name *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Step A - Account Creation" className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs">Description</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this suite cover?" className="mt-1 min-h-16" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={loading || !name || !selectedModuleId} className="bg-emerald-600 hover:bg-emerald-700">
+            {loading ? "Saving…" : suite ? "Save changes" : "Create suite"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------------- Milestones Section ---------------- */
+function MilestonesSection({ isAdmin }: { isAdmin: boolean }) {
+  const [milestones, setMilestones] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showDialog, setShowDialog] = useState(false);
+  const [editMilestone, setEditMilestone] = useState<any | null>(null);
+  const [deleteMilestone, setDeleteMilestone] = useState<any | null>(null);
+  const { toast } = useToast();
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/milestones");
+      const data = await res.json();
+      setMilestones(data.milestones || []);
+    } catch { setMilestones([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleDelete = async (m: any) => {
+    try {
+      const res = await fetch(`/api/milestones/${m.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      const data = await res.json();
+      toast({ title: "Milestone deleted", description: `${data.deleted.name} — ${data.deleted.testCaseCount} test cases unlinked` });
+      setDeleteMilestone(null);
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2"><Target className="size-4 text-emerald-600" /> Milestones</CardTitle>
+            <CardDescription className="text-xs">{milestones.length} milestones · track testing progress against project goals</CardDescription>
+          </div>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={() => { setEditMilestone(null); setShowDialog(true); }}>
+              <Plus className="size-3.5 mr-1" /> New Milestone
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? <p className="text-xs text-slate-400">Loading…</p> : milestones.length === 0 ? (
+          <p className="text-xs text-slate-400 italic py-4 text-center">No milestones yet</p>
+        ) : (
+          <div className="space-y-2">
+            {milestones.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 p-2 rounded border border-slate-100 hover:bg-slate-50">
+                <Target className="size-4 text-emerald-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-900">{m.name}</span>
+                    {m.status === "active" && <Badge variant="outline" className="text-[9px] text-emerald-700 border-emerald-200 bg-emerald-50">Active</Badge>}
+                    {m.status === "completed" && <Badge variant="outline" className="text-[9px] text-sky-700 border-sky-200 bg-sky-50">Completed</Badge>}
+                    {m.status === "archived" && <Badge variant="outline" className="text-[9px] text-slate-500">Archived</Badge>}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {m.stats.total} tests · {m.stats.passRate}% pass
+                    {m.targetDate && ` · target: ${new Date(m.targetDate).toLocaleDateString()}`}
+                  </div>
+                </div>
+                <Progress value={m.stats.passRate} className="h-1.5 w-16" />
+                {isAdmin && (
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-sky-700 hover:bg-sky-50" onClick={() => { setEditMilestone(m); setShowDialog(true); }} title="Edit milestone">
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-rose-700 hover:bg-rose-50" onClick={() => setDeleteMilestone(m)} title="Delete milestone">
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      {showDialog && (
+        <MilestoneEditDialog
+          milestone={editMilestone}
+          onClose={() => { setShowDialog(false); setEditMilestone(null); }}
+          onSuccess={() => { setShowDialog(false); setEditMilestone(null); refresh(); }}
+        />
+      )}
+
+      {deleteMilestone && (
+        <Dialog open onOpenChange={() => setDeleteMilestone(null)}>
+          <DialogContent aria-describedby={undefined} className="max-w-md">
+            <DialogHeader><DialogTitle className="flex items-center gap-2 text-rose-700"><Trash2 className="size-4" /> Delete Milestone</DialogTitle></DialogHeader>
+            <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+              <p className="text-sm text-rose-800">Delete <strong>{deleteMilestone.name}</strong>?</p>
+              <p className="text-xs text-rose-700 mt-1">{deleteMilestone.stats.total} test cases will be unlinked (preserved) but no longer associated with a milestone.</p>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setDeleteMilestone(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => handleDelete(deleteMilestone)}>Delete</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </Card>
+  );
+}
+
+/* ---------------- Milestone Edit Dialog ---------------- */
+function MilestoneEditDialog({ milestone, onClose, onSuccess }: { milestone: any | null; onClose: () => void; onSuccess: () => void }) {
+  const [name, setName] = useState(milestone?.name ?? "");
+  const [description, setDescription] = useState(milestone?.description ?? "");
+  const [targetDate, setTargetDate] = useState(milestone?.targetDate ? new Date(milestone.targetDate).toISOString().slice(0, 10) : "");
+  const [status, setStatus] = useState(milestone?.status ?? "active");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const url = milestone ? `/api/milestones/${milestone.id}` : "/api/milestones";
+      const method = milestone ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description, targetDate: targetDate || null, status }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      toast({ title: milestone ? "Milestone updated" : "Milestone created", description: name });
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent aria-describedby={undefined} className="max-w-md">
+        <DialogHeader><DialogTitle>{milestone ? "Edit Milestone" : "New Milestone"}</DialogTitle></DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-xs">Name *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. MVP Launch Readiness" className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs">Description</Label>
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this milestone's goal?" className="mt-1 min-h-16" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Target Date</Label>
+              <Input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs">Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={loading || !name} className="bg-emerald-600 hover:bg-emerald-700">
+            {loading ? "Saving…" : milestone ? "Save changes" : "Create milestone"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
