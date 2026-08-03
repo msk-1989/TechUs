@@ -558,7 +558,7 @@ function Header({
       {/* Add Tester Dialog */}
       {showAddTester && (
         <Dialog open onOpenChange={(o) => !o && setShowAddTester(false)}>
-          <DialogContent className="max-w-md">
+          <DialogContent aria-describedby={undefined} className="max-w-md">
             <DialogHeader>
               <DialogTitle>Add new tester</DialogTitle>
             </DialogHeader>
@@ -1653,7 +1653,7 @@ function TestCaseDetailDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <Badge variant="outline" className="text-[10px]">{tc.suite.module.name}</Badge>
@@ -2226,7 +2226,7 @@ function NewBugDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Report New Bug</DialogTitle>
         </DialogHeader>
@@ -2292,16 +2292,17 @@ function NewBugDialog({
                 )}
               </Label>
               <Select
-                value={reporterId}
+                value={reporterId || "__none__"}
                 onValueChange={(v) => {
-                  setReporterId(v);
-                  const picked = testers.find((t) => t.id === v);
+                  const realId = v === "__none__" ? "" : v;
+                  setReporterId(realId);
+                  const picked = testers.find((t) => t.id === realId);
                   setReporter(picked?.name ?? "");
                 }}
               >
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Select reporter" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">— None —</SelectItem>
+                  <SelectItem value="__none__">— None —</SelectItem>
                   {testers.map((t) => (
                     <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                   ))}
@@ -2311,10 +2312,10 @@ function NewBugDialog({
           </div>
           <div>
             <Label className="text-xs">Assign to (optional)</Label>
-            <Select value={assigneeId} onValueChange={setAssigneeId}>
+            <Select value={assigneeId || "__none__"} onValueChange={(v) => setAssigneeId(v === "__none__" ? "" : v)}>
               <SelectTrigger className="mt-1"><SelectValue placeholder="Leave unassigned" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">— Unassigned —</SelectItem>
+                <SelectItem value="__none__">— Unassigned —</SelectItem>
                 {testers.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                 ))}
@@ -2953,7 +2954,7 @@ function TestCaseCrudDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {action === "create" && <><Plus className="size-4 text-emerald-600" /> Create New Test Case</>}
@@ -3067,10 +3068,10 @@ function TestCaseCrudDialog({
               </div>
               <div>
                 <Label className="text-xs">Assign To</Label>
-                <Select value={assignedTesterId} onValueChange={setAssignedTesterId}>
+                <Select value={assignedTesterId || "__none__"} onValueChange={(v) => setAssignedTesterId(v === "__none__" ? "" : v)}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">— Unassigned —</SelectItem>
+                    <SelectItem value="__none__">— Unassigned —</SelectItem>
                     {testers.map((t) => (
                       <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                     ))}
@@ -3944,7 +3945,7 @@ function UserEditDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isEdit ? <><Pencil className="size-4 text-sky-600" /> Edit User</> : <><UserPlus className="size-4 text-emerald-600" /> Add New User</>}
@@ -4049,7 +4050,7 @@ function DeleteUserDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-rose-700">
             <Trash2 className="size-4" /> Delete User
@@ -4396,7 +4397,7 @@ function BugAttachments({ bugId }: { bugId: string }) {
       {/* Preview modal */}
       {previewUrl && previewAttachment && (
         <Dialog open onOpenChange={() => { setPreviewUrl(null); setPreviewAttachment(null); }}>
-          <DialogContent className="max-w-3xl">
+          <DialogContent aria-describedby={undefined} className="max-w-3xl">
             <DialogHeader>
               <DialogTitle className="text-sm flex items-center justify-between">
                 <span>{previewAttachment.fileName}</span>
