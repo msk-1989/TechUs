@@ -51,6 +51,7 @@ import {
   Code,
   Wrench,
   PlayCircle,
+  UserCog,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -107,13 +108,14 @@ const TESTER_ROLE_META: Record<string, { label: string; icon: typeof Crown }> = 
   developer: { label: "Developer",  icon: Code },
 };
 
-type ViewKey = "dashboard" | "test_cases" | "bugs" | "my_bugs" | "testers" | "audit" | "requirements" | "modules" | "reports";
+type ViewKey = "dashboard" | "test_cases" | "bugs" | "my_bugs" | "users" | "testers" | "audit" | "requirements" | "modules" | "reports";
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean; developerOnly?: boolean }[] = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "test_cases", label: "Test Cases", icon: ListChecks },
   { key: "bugs",       label: "Bug Tracker", icon: BugIcon },
   { key: "my_bugs",    label: "My Bugs",     icon: Wrench, developerOnly: true },
+  { key: "users",      label: "User Management", icon: UserCog, adminOnly: true },
   { key: "testers",    label: "Testers",     icon: Users },
   { key: "audit",      label: "Audit Log",   icon: ScrollText, adminOnly: true },
   { key: "requirements", label: "Requirements", icon: FileCheck },
@@ -388,6 +390,7 @@ function AppContent() {
               {view === "audit" && <AuditLogView userRole={(session?.user as any)?.role} />}
               {view === "requirements" && <RequirementsView />}
               {view === "my_bugs" && <MyBugsView session={session} />}
+              {view === "users" && <UserManagementView session={session} />}
               {view === "reports" && <ReportsView stats={stats} testCases={testCases} bugs={bugs} />}
             </motion.div>
           </AnimatePresence>
@@ -3582,5 +3585,494 @@ function MyBugsView({ session }: { session: any }) {
         )}
       </div>
     </div>
+  );
+}
+
+/* ---------------- User Management View (Admin Only) ---------------- */
+function UserManagementView({ session }: { session: any }) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [showDialog, setShowDialog] = useState(false);
+  const [editUser, setEditUser] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const { toast } = useToast();
+  const currentUserId = (session?.user as any)?.id;
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/users");
+      if (res.status === 403) {
+        toast({ title: "Admin access required", variant: "destructive" });
+        setUsers([]);
+        return;
+      }
+      const data = await res.json();
+      setUsers(data.users || []);
+    } catch {
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const filtered = users.filter((u) => {
+    if (roleFilter !== "all" && u.role !== roleFilter) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      if (!u.name?.toLowerCase().includes(s) && !u.email?.toLowerCase().includes(s)) return false;
+    }
+    return true;
+  });
+
+  const counts = {
+    total: users.length,
+    admins: users.filter((u) => u.role === "admin").length,
+    leads: users.filter((u) => u.role === "lead").length,
+    testers: users.filter((u) => u.role === "tester").length,
+    developers: users.filter((u) => u.role === "developer").length,
+    active: users.filter((u) => u.active).length,
+    inactive: users.filter((u) => !u.active).length,
+  };
+
+  const handleToggleActive = async (user: any) => {
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !user.active }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed");
+      }
+      toast({
+        title: `User ${!user.active ? "activated" : "deactivated"}`,
+        description: `${user.name} is now ${!user.active ? "active" : "inactive"}`,
+      });
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Update failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <UserCog className="size-5 text-emerald-600" />
+            User Management
+          </h2>
+          <p className="text-sm text-slate-500">
+            Create, edit, deactivate, or remove users — testers, developers, leads, and admins
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => { setEditUser(null); setShowDialog(true); }}
+          className="bg-emerald-600 hover:bg-emerald-700"
+        >
+          <Plus className="size-3.5 mr-1" /> Add User
+        </Button>
+      </div>
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card><CardContent className="p-3">
+          <div className="text-[10px] uppercase text-slate-500 font-semibold">Total Users</div>
+          <div className="text-xl font-bold text-slate-900">{counts.total}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <div className="text-[10px] uppercase text-slate-500 font-semibold">Testers</div>
+          <div className="text-xl font-bold text-violet-700">{counts.testers}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <div className="text-[10px] uppercase text-slate-500 font-semibold">Developers</div>
+          <div className="text-xl font-bold text-teal-700">{counts.developers}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <div className="text-[10px] uppercase text-slate-500 font-semibold">Admins + Leads</div>
+          <div className="text-xl font-bold text-emerald-700">{counts.admins + counts.leads}</div>
+        </CardContent></Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="w-40 h-9 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All roles ({counts.total})</SelectItem>
+            <SelectItem value="admin">Admins ({counts.admins})</SelectItem>
+            <SelectItem value="lead">QA Leads ({counts.leads})</SelectItem>
+            <SelectItem value="tester">Testers ({counts.testers})</SelectItem>
+            <SelectItem value="developer">Developers ({counts.developers})</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="relative">
+          <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Input
+            placeholder="Search name or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 w-56 h-9"
+          />
+        </div>
+        <Button size="sm" variant="outline" onClick={refresh} className="h-9">
+          <RefreshCw className="size-3.5 mr-1" /> Refresh
+        </Button>
+      </div>
+
+      {/* Users table */}
+      <Card>
+        <CardContent className="p-0">
+          <ScrollArea className="h-[calc(100vh-22rem)]">
+            <Table>
+              <TableHeader className="sticky top-0 bg-white z-10">
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead className="text-center">Activity</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow><TableCell colSpan={6} className="text-center text-slate-400 py-8">Loading users…</TableCell></TableRow>
+                ) : filtered.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center text-slate-400 py-8">No users match your filters.</TableCell></TableRow>
+                ) : filtered.map((u) => {
+                  const isSelf = u.id === currentUserId;
+                  const RoleIcon = TESTER_ROLE_META[u.role]?.icon ?? User;
+                  return (
+                    <TableRow key={u.id} className={isSelf ? "bg-emerald-50/30" : ""}>
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <Avatar className="size-9">
+                            <AvatarFallback className={`text-[11px] font-bold bg-gradient-to-br ${u.tester ? testerColor(u.tester.color).gradient : "from-slate-500 to-slate-700"} text-white`}>
+                              {initials(u.name ?? u.email)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-900 text-sm flex items-center gap-1.5">
+                              {u.name}
+                              {isSelf && <span className="text-[9px] text-emerald-700 bg-emerald-100 rounded px-1 py-0.5">YOU</span>}
+                            </div>
+                            <div className="text-[11px] text-slate-500">{u.email}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium ${ROLE_BADGE[u.role] ?? "bg-slate-100 text-slate-700"}`}>
+                          <RoleIcon className="size-2.5" />
+                          {TESTER_ROLE_META[u.role]?.label ?? u.role}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center text-xs text-slate-600">
+                        {u.tester ? (
+                          <div className="space-y-0.5">
+                            <div>{u.tester.stats.executions} runs</div>
+                            <div className="text-[10px] text-slate-400">
+                              {u.tester.stats.bugsReported} reported · {u.tester.stats.bugsAssigned} assigned
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {u.active ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
+                            <span className="size-1.5 rounded-full bg-emerald-500" /> Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
+                            <span className="size-1.5 rounded-full bg-slate-400" /> Inactive
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500">
+                        {new Date(u.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-sky-700 hover:bg-sky-50"
+                            onClick={() => { setEditUser(u); setShowDialog(true); }}
+                            title="Edit user"
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className={`h-7 px-2 ${u.active ? "text-amber-700 hover:bg-amber-50" : "text-emerald-700 hover:bg-emerald-50"}`}
+                            onClick={() => handleToggleActive(u)}
+                            disabled={isSelf}
+                            title={isSelf ? "Cannot deactivate yourself" : (u.active ? "Deactivate user" : "Activate user")}
+                          >
+                            {u.active ? <Pause className="size-3.5" /> : <PlayCircle className="size-3.5" />}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-rose-700 hover:bg-rose-50"
+                            onClick={() => setDeleteTarget(u)}
+                            disabled={isSelf}
+                            title={isSelf ? "Cannot delete yourself" : "Delete user"}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
+      {/* Create/Edit User Dialog */}
+      {showDialog && (
+        <UserEditDialog
+          user={editUser}
+          onClose={() => { setShowDialog(false); setEditUser(null); }}
+          onSuccess={() => {
+            setShowDialog(false);
+            setEditUser(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      {deleteTarget && (
+        <DeleteUserDialog
+          user={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onSuccess={() => {
+            setDeleteTarget(null);
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+const ROLE_BADGE: Record<string, string> = {
+  admin:     "bg-emerald-50 text-emerald-700",
+  lead:      "bg-amber-50 text-amber-700",
+  tester:    "bg-violet-50 text-violet-700",
+  developer: "bg-teal-50 text-teal-700",
+};
+
+/* ---------------- User Edit Dialog ---------------- */
+function UserEditDialog({
+  user, onClose, onSuccess,
+}: {
+  user: any | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const isEdit = !!user;
+  const [name, setName] = useState(user?.name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [role, setRole] = useState<string>(user?.role ?? "tester");
+  const [color, setColor] = useState(user?.tester?.color ?? "emerald");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const colors = ["emerald", "violet", "amber", "sky", "rose", "teal"];
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      if (isEdit) {
+        const body: any = { name, email, role, color };
+        if (password) body.password = password;
+        const res = await fetch(`/api/admin/users/${user.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed");
+        }
+        toast({ title: "User updated", description: `${name} (${role})` });
+      } else {
+        const res = await fetch("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, password, role, color }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed");
+        }
+        toast({ title: "User created", description: `${name} (${role})` });
+      }
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {isEdit ? <><Pencil className="size-4 text-sky-600" /> Edit User</> : <><UserPlus className="size-4 text-emerald-600" /> Add New User</>}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-xs">Full Name *</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="mt-1" placeholder="e.g. Rahul Verma" />
+          </div>
+          <div>
+            <Label className="text-xs">Email *</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1" placeholder="user@techus.app" />
+          </div>
+          <div>
+            <Label className="text-xs">Role *</Label>
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tester">Tester — executes tests, reports bugs</SelectItem>
+                <SelectItem value="developer">Developer — fixes bugs assigned to them</SelectItem>
+                <SelectItem value="lead">QA Lead — manages test cases, assigns bugs</SelectItem>
+                <SelectItem value="admin">Admin — full access, manages users</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Avatar Color</Label>
+            <div className="flex gap-2 mt-1.5">
+              {colors.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={`size-8 rounded-full bg-gradient-to-br ${testerColor(c).gradient} flex items-center justify-center transition-all ${color === c ? "ring-2 ring-offset-2 ring-slate-400 scale-110" : ""}`}
+                >
+                  {color === c && <CheckCircle2 className="size-4 text-white" />}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs">
+              Password {isEdit ? "(leave blank to keep current)" : "*"}
+            </Label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1"
+              placeholder={isEdit ? "•••••• (unchanged)" : "Min 6 characters"}
+              {...(!isEdit ? { required: true } : {})}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button
+            onClick={handleSave}
+            disabled={loading || !name || !email || (!isEdit && !password)}
+            className={isEdit ? "bg-sky-600 hover:bg-sky-700" : "bg-emerald-600 hover:bg-emerald-700"}
+          >
+            {loading ? "Saving…" : isEdit ? "Save changes" : "Create user"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------------- Delete User Confirmation ---------------- */
+function DeleteUserDialog({
+  user, onClose, onSuccess,
+}: {
+  user: any;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed");
+      }
+      const data = await res.json();
+      toast({
+        title: "User deleted",
+        description: `${user.name} has been removed. ${data.deleted?.executionCount ?? 0} executions, ${data.deleted?.bugReportedCount ?? 0} bugs reported, ${data.deleted?.bugAssignedCount ?? 0} bugs assigned.`,
+      });
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-rose-700">
+            <Trash2 className="size-4" /> Delete User
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div className="bg-rose-50 border border-rose-200 rounded-lg p-4">
+            <p className="text-sm font-semibold text-rose-800 mb-1">Are you sure?</p>
+            <p className="text-xs text-rose-700">
+              You are about to permanently delete <strong>{user.name}</strong> ({user.email}).
+            </p>
+            <p className="text-xs text-rose-700 mt-2">
+              This will also delete:
+            </p>
+            <ul className="text-xs text-rose-700 mt-1 ml-4 list-disc">
+              <li>Their tester profile</li>
+              <li>{user.tester?.stats.executions ?? 0} test execution records</li>
+              <li>Their in-app notifications</li>
+              <li>Bugs they reported/assigned will be unassigned (preserved)</li>
+              <li>Audit log entries will be anonymized (preserved)</li>
+            </ul>
+            <p className="text-xs text-rose-700 mt-2 font-medium">This action cannot be undone.</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="destructive" onClick={handleDelete} disabled={loading}>
+            {loading ? "Deleting…" : "Delete permanently"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
