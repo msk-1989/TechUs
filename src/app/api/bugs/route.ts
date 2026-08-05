@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createAuditLog, notifyUser } from "@/lib/audit";
+import { emailTemplate_BugAssigned, emailTemplate_BugFixed } from "@/lib/email";
 import { getCurrentUser, isAdmin, canUpdateBug } from "@/lib/permissions";
 
 export async function GET(req: NextRequest) {
@@ -117,12 +118,14 @@ export async function POST(req: NextRequest) {
 
   // Notify the assignee if set
   if (assignee?.userId) {
+    const emailTpl = emailTemplate_BugAssigned({ title, severity: severity ?? "major", moduleName, stepsToRepro });
     await notifyUser({
       userId: assignee.userId,
       type: "bug_assigned",
       title: `New bug assigned: ${title}`,
       body: `Severity: ${severity ?? "major"} · Module: ${moduleName ?? "—"}`,
       link: "/?view=bugs",
+      email: assignee.user?.email ? { to: assignee.user.email, ...emailTpl } : undefined,
     });
   }
 
@@ -205,12 +208,14 @@ export async function PATCH(req: NextRequest) {
       include: { user: true },
     });
     if (newAssignee?.userId) {
+      const emailTpl = emailTemplate_BugAssigned({ title: before?.title ?? "Bug", severity: before.severity, moduleName: before.moduleName });
       await notifyUser({
         userId: newAssignee.userId,
         type: "bug_assigned",
         title: `Bug reassigned to you: ${before?.title ?? "Bug"}`,
         body: `Status: ${status ?? "unchanged"}`,
         link: "/?view=bugs",
+        email: newAssignee.user?.email ? { to: newAssignee.user.email, ...emailTpl } : undefined,
       });
     }
   }
@@ -222,12 +227,15 @@ export async function PATCH(req: NextRequest) {
       include: { user: true },
     });
     if (reporter?.userId) {
+      const fixerName = session.name ?? "A developer";
+      const emailTpl = emailTemplate_BugFixed({ title: before?.title ?? "Bug" }, fixerName, resolutionNotes);
       await notifyUser({
         userId: reporter.userId,
         type: "bug_fixed",
         title: `Bug marked as fixed: ${before?.title ?? "Bug"}`,
         body: `The developer has marked this bug as fixed. Please verify and close.`,
         link: "/?view=bugs",
+        email: reporter.user?.email ? { to: reporter.user.email, ...emailTpl } : undefined,
       });
     }
   }

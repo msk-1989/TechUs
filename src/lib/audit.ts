@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { sendEmail } from "@/lib/email";
 
 export async function createAuditLog(params: {
   userId?: string;
@@ -10,7 +11,6 @@ export async function createAuditLog(params: {
   try {
     await db.auditLog.create({ data: params });
   } catch (e) {
-    // Audit log failure should never break the main flow
     console.error("Audit log creation failed:", e);
   }
 }
@@ -21,10 +21,24 @@ export async function notifyUser(params: {
   title: string;
   body?: string;
   link?: string;
+  email?: { to: string; subject: string; html: string; text?: string };
 }) {
   try {
-    await db.notification.create({ data: params });
+    await db.notification.create({
+      data: {
+        userId: params.userId,
+        type: params.type,
+        title: params.title,
+        body: params.body,
+        link: params.link,
+      },
+    });
   } catch (e) {
     console.error("Notification creation failed:", e);
+  }
+
+  // Also send email if provided
+  if (params.email) {
+    await sendEmail(params.email);
   }
 }

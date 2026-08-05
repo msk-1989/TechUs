@@ -58,6 +58,11 @@ import {
   Video,
   Square,
   Loader2,
+  MessageCircle,
+  Send,
+  CheckSquare,
+  Square as SquareIcon,
+  Flag,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -114,13 +119,14 @@ const TESTER_ROLE_META: Record<string, { label: string; icon: typeof Crown }> = 
   developer: { label: "Developer",  icon: Code },
 };
 
-type ViewKey = "dashboard" | "test_cases" | "bugs" | "my_bugs" | "users" | "testers" | "audit" | "requirements" | "modules" | "reports";
+type ViewKey = "dashboard" | "test_cases" | "bugs" | "my_bugs" | "test_runs" | "users" | "testers" | "audit" | "requirements" | "modules" | "reports";
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: typeof LayoutDashboard; adminOnly?: boolean; developerOnly?: boolean }[] = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "test_cases", label: "Test Cases", icon: ListChecks },
   { key: "bugs",       label: "Bug Tracker", icon: BugIcon },
   { key: "my_bugs",    label: "My Bugs",     icon: Wrench, developerOnly: true },
+  { key: "test_runs",  label: "Test Runs",   icon: PlayCircle },
   { key: "users",      label: "User Management", icon: UserCog, adminOnly: true },
   { key: "testers",    label: "Testers",     icon: Users },
   { key: "audit",      label: "Audit Log",   icon: ScrollText, adminOnly: true },
@@ -396,6 +402,7 @@ function AppContent() {
               {view === "audit" && <AuditLogView userRole={(session?.user as any)?.role} />}
               {view === "requirements" && <RequirementsView />}
               {view === "my_bugs" && <MyBugsView session={session} />}
+              {view === "test_runs" && <TestRunsView session={session} />}
               {view === "users" && <UserManagementView session={session} />}
               {view === "reports" && <ReportsView stats={stats} testCases={testCases} bugs={bugs} />}
             </motion.div>
@@ -2179,6 +2186,8 @@ function BugsView({
                         </div>
                         {/* Attachments section */}
                         <BugAttachments bugId={bug.id} />
+                        {/* Comments section */}
+                        <BugComments bugId={bug.id} />
                       </div>
                     )}
                   </div>
@@ -4873,6 +4882,243 @@ function BugAttachments({ bugId }: { bugId: string }) {
                 </div>
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Bug Comments (discussion thread) ---------------- */
+function BugComments({ bugId }: { bugId: string }) {
+  const [comments, setComments] = useState<any[]>([]);
+  const [body, setBody] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/bugs/${bugId}/comments`);
+      const data = await res.json();
+      setComments(data.comments || []);
+    } catch { setComments([]); }
+    finally { setLoading(false); }
+  }, [bugId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleSubmit = async () => {
+    if (!body.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/bugs/${bugId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      if (!res.ok) throw new Error("Failed to post comment");
+      setBody("");
+      refresh();
+      toast({ title: "Comment posted" });
+    } catch (e: any) {
+      toast({ title: "Failed to post", description: e.message, variant: "destructive" });
+    } finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="mt-3 border-t border-slate-100 pt-3">
+      <h5 className="text-[10px] uppercase font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
+        <MessageCircle className="size-3" />
+        Discussion ({comments.length})
+      </h5>
+      {loading ? (
+        <p className="text-[10px] text-slate-400">Loading comments…</p>
+      ) : comments.length === 0 ? (
+        <p className="text-[10px] text-slate-400 italic mb-2">No comments yet. Start the discussion.</p>
+      ) : (
+        <div className="space-y-2 mb-3 max-h-48 overflow-y-auto pr-1">
+          {comments.map((c) => (
+            <div key={c.id} className="flex items-start gap-2 p-2 rounded bg-slate-50">
+              <Avatar className="size-6 shrink-0">
+                <AvatarFallback className="text-[9px] font-bold bg-gradient-to-br from-slate-500 to-slate-700 text-white">
+                  {initials(c.user?.name ?? "?")}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[11px] font-semibold text-slate-900">{c.user?.name ?? "Unknown"}</span>
+                  <span className="text-[9px] text-slate-400">{new Date(c.createdAt).toLocaleString()}</span>
+                </div>
+                <p className="text-[11px] text-slate-700 mt-0.5 whitespace-pre-wrap">{c.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Write a comment…"
+          className="min-h-8 text-xs flex-1"
+          rows={2}
+        />
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={submitting || !body.trim()}
+          className="bg-emerald-600 hover:bg-emerald-700 h-9"
+        >
+          {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Test Runs View ---------------- */
+function TestRunsView({ session }: { session: any }) {
+  const [runs, setRuns] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showDialog, setShowDialog] = useState(false);
+  const [runName, setRunName] = useState("");
+  const [runEnv, setRunEnv] = useState("development");
+  const { toast } = useToast();
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/test-runs");
+      const data = await res.json();
+      setRuns(data.runs || []);
+    } catch { setRuns([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleStart = async () => {
+    if (!runName.trim()) return;
+    try {
+      const res = await fetch("/api/test-runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: runName, environment: runEnv }),
+      });
+      if (!res.ok) throw new Error("Failed to create run");
+      toast({ title: "Test run started", description: runName });
+      setRunName("");
+      setShowDialog(false);
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleComplete = async (runId: string) => {
+    try {
+      await fetch("/api/test-runs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: runId, status: "completed" }),
+      });
+      toast({ title: "Test run completed" });
+      refresh();
+    } catch {
+      toast({ title: "Failed", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <PlayCircle className="size-5 text-emerald-600" />
+            Test Run Sessions
+          </h2>
+          <p className="text-sm text-slate-500">Start named test runs, execute in sequence, track progress live</p>
+        </div>
+        <Button size="sm" onClick={() => setShowDialog(true)} className="bg-emerald-600 hover:bg-emerald-700">
+          <Plus className="size-3.5 mr-1" /> Start New Run
+        </Button>
+      </div>
+
+      {loading ? <LoadingSkeleton /> : runs.length === 0 ? (
+        <Card><CardContent className="py-12 text-center text-sm text-slate-400">
+          <PlayCircle className="size-8 mx-auto mb-2 text-slate-300" />
+          No test runs yet. Click "Start New Run" to begin.
+        </CardContent></Card>
+      ) : (
+        <div className="space-y-3">
+          {runs.map((run) => {
+            const total = run.executions?.length || 0;
+            const pass = run.executions?.filter((e: any) => e.status === "pass").length || 0;
+            const fail = run.executions?.filter((e: any) => e.status === "fail").length || 0;
+            const isActive = run.status === "in_progress";
+            return (
+              <Card key={run.id} className={isActive ? "border-emerald-300 ring-1 ring-emerald-200" : ""}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-sm text-slate-900">{run.name}</h3>
+                        {isActive && <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />}
+                        <Badge variant="outline" className="text-[9px]">{run.status}</Badge>
+                        {run.environment && <Badge variant="outline" className="text-[9px] text-slate-500">{run.environment}</Badge>}
+                      </div>
+                      {run.description && <p className="text-xs text-slate-500 mt-1">{run.description}</p>}
+                      <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
+                        <span><strong className="text-slate-700">{total}</strong> executions</span>
+                        <span className="text-emerald-600"><strong>{pass}</strong> pass</span>
+                        <span className="text-rose-600"><strong>{fail}</strong> fail</span>
+                        <span>· Started {new Date(run.startedAt).toLocaleString()}</span>
+                        {run.completedAt && <span>· Completed {new Date(run.completedAt).toLocaleString()}</span>}
+                      </div>
+                      {total > 0 && (
+                        <div className="mt-2">
+                          <Progress value={total > 0 ? ((pass + fail) / total) * 100 : 0} className="h-1.5" />
+                        </div>
+                      )}
+                    </div>
+                    {isActive && (
+                      <Button size="sm" variant="outline" onClick={() => handleComplete(run.id)} className="text-emerald-700 border-emerald-300 hover:bg-emerald-50">
+                        Complete Run
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {showDialog && (
+        <Dialog open onOpenChange={() => setShowDialog(false)}>
+          <DialogContent aria-describedby={undefined} className="max-w-md">
+            <DialogHeader><DialogTitle>Start New Test Run</DialogTitle></DialogHeader>
+            <div className="space-y-3 py-2">
+              <div>
+                <Label className="text-xs">Run Name *</Label>
+                <Input value={runName} onChange={(e) => setRunName(e.target.value)} placeholder="e.g. Regression - Sprint 12" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Environment</Label>
+                <Select value={runEnv} onValueChange={setRunEnv}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="development">Development</SelectItem>
+                    <SelectItem value="staging">Staging</SelectItem>
+                    <SelectItem value="production">Production</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowDialog(false)}>Cancel</Button>
+              <Button onClick={handleStart} disabled={!runName.trim()} className="bg-emerald-600 hover:bg-emerald-700">Start Run</Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}

@@ -30,6 +30,7 @@ model User {
   auditLogs     AuditLog[]
   notifications Notification[]
   attachments   BugAttachment[]
+  comments      BugComment[]
 }
 
 model Account {
@@ -172,6 +173,7 @@ model Bug {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   attachments   BugAttachment[]
+  comments      BugComment[]
 }
 
 // ============ Bug Attachments (screenshots, recordings, voice notes) ============
@@ -188,6 +190,22 @@ model BugAttachment {
   uploadedById  String?
   uploadedBy    User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
+
+  @@index([bugId])
+  @@index([createdAt])
+}
+
+// ============ Bug Comments (discussion thread) ============
+
+model BugComment {
+  id        String   @id @default(cuid())
+  bugId     String
+  bug       Bug      @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([bugId])
   @@index([createdAt])
