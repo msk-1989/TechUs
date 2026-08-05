@@ -150,7 +150,7 @@ export async function PATCH(req: NextRequest) {
   // Fetch the bug to check permissions
   const before = await db.bug.findUnique({
     where: { id },
-    select: { title: true, status: true, assigneeId: true, reporterId: true },
+    select: { title: true, status: true, assigneeId: true, reporterId: true, severity: true, moduleName: true },
   });
   if (!before) {
     return NextResponse.json({ error: "Bug not found" }, { status: 404 });

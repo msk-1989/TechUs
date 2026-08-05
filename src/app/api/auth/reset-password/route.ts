@@ -25,7 +25,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
   }
   if (token.expires < new Date()) {
-    await db.verificationToken.delete({ where: { id: token.id } });
+    await db.verificationToken.delete({
+      where: { identifier_token: { identifier: token.identifier, token: token.token } },
+    });
     return NextResponse.json({ error: "OTP expired. Please request a new one." }, { status: 400 });
   }
 
@@ -44,7 +46,9 @@ export async function POST(req: NextRequest) {
   });
 
   // Delete the used token
-  await db.verificationToken.delete({ where: { id: token.id } });
+  await db.verificationToken.delete({
+    where: { identifier_token: { identifier: token.identifier, token: token.token } },
+  });
 
   await createAuditLog({
     userId: user.id,

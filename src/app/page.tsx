@@ -109,6 +109,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSession, signOut } from "next-auth/react";
 import { AuthGate } from "@/components/auth-gate";
 
@@ -1270,6 +1271,9 @@ function TestCasesView({
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(true);
   const [selectedTc, setSelectedTc] = useState<TestCase | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<string>("");
+  const { toast: bulkToast } = useToast();
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -1277,6 +1281,43 @@ function TestCasesView({
     }, 250);
     return () => clearTimeout(t);
   }, [filters, search, onRefresh]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (prev.size === testCases.slice(0, 200).length) return new Set();
+      return new Set(testCases.slice(0, 200).map((tc) => tc.id));
+    });
+  };
+  const handleBulkAction = async (action: string) => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    try {
+      if (action === "delete") {
+        if (!confirm(`Delete ${ids.length} test case(s)? This cannot be undone.`)) return;
+      }
+      const res = await fetch("/api/test-cases/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, action, value: action === "status" ? "pass" : action === "assign" ? "" : undefined }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      const data = await res.json();
+      bulkToast({ title: `Bulk ${action} complete`, description: `${data.affected} test case(s) affected` });
+      setSelectedIds(new Set());
+      setBulkAction("");
+      onRefresh();
+    } catch (e: any) {
+      bulkToast({ title: "Bulk action failed", description: e.message, variant: "destructive" });
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -1429,12 +1470,46 @@ function TestCasesView({
         </Card>
       )}
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <Card className="border-emerald-300 bg-emerald-50">
+          <CardContent className="p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-emerald-800 flex items-center gap-1.5">
+                <CheckSquare className="size-4" />
+                {selectedIds.size} selected
+              </span>
+              <Separator orientation="vertical" className="h-6" />
+              <Select value={bulkAction} onValueChange={(v) => { setBulkAction(v); handleBulkAction(v); }}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue placeholder="Bulk action…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="status">✓ Mark all as Pass</SelectItem>
+                  <SelectItem value="assign">Unassign all</SelectItem>
+                  {isAdmin && <SelectItem value="delete" className="text-rose-600">🗑 Delete all</SelectItem>}
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="h-8 text-xs">
+                Clear
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-0">
           <ScrollArea className="h-[calc(100vh-18rem)]">
             <Table>
               <TableHeader className="sticky top-0 bg-white z-10">
                 <TableRow>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      checked={selectedIds.size === testCases.slice(0, 200).length && testCases.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead className="w-[38%]">Test Case</TableHead>
                   <TableHead>Module / Suite</TableHead>
                   <TableHead>Status</TableHead>
@@ -1447,14 +1522,14 @@ function TestCasesView({
               <TableBody>
                 {loading && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-slate-400 py-8">
+                    <TableCell colSpan={8} className="text-center text-slate-400 py-8">
                       Loading…
                     </TableCell>
                   </TableRow>
                 )}
                 {!loading && testCases.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-slate-400 py-8">
+                    <TableCell colSpan={8} className="text-center text-slate-400 py-8">
                       No test cases match your filters.
                     </TableCell>
                   </TableRow>
@@ -1466,8 +1541,11 @@ function TestCasesView({
                     <TableRow
                       key={tc.id}
                       onClick={() => setSelectedTc(tc)}
-                      className="cursor-pointer hover:bg-slate-50"
+                      className={`cursor-pointer hover:bg-slate-50 ${selectedIds.has(tc.id) ? "bg-emerald-50/40" : ""}`}
                     >
+                      <TableCell onClick={(e) => { e.stopPropagation(); toggleSelect(tc.id); }}>
+                        <Checkbox checked={selectedIds.has(tc.id)} />
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-start gap-1.5">
                           {tc.decisionNeeded && (
